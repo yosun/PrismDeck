@@ -215,6 +215,8 @@ try {
     await touch.evaluate(variant=>{window.one.update({variant,view:{yaw:0,pitch:0}});window.one.controller.focus(5000);window.one.controller.setZoom(.35);},variant);
     const toggle=touch.locator('#one .prismdeck-view-toggle');if(await toggle.getAttribute('aria-expanded')!=='true')await toggle.tap();
     await touch.locator('#one .prismdeck-orbit-toggle').tap();
+    // Native touch may deliver the synthesized click after tap() resolves.
+    await touch.waitForFunction(()=>document.querySelector('#one .prismdeck-orbit-toggle')?.getAttribute('aria-pressed')==='true');
     assert.equal(await touch.locator('#one .prismdeck-orbit-toggle').getAttribute('aria-pressed'),'true',`${variant}: touch Rotate mode announces its state`);
     const box=await touch.locator('#one .prismdeck-viewport').boundingBox(),x=box.x+box.width*.5,y=box.y+box.height*.4;
     const before=await touch.evaluate(()=>({state:window.one.controller.getSnapshot(),stats:{...window.stats.one}}));
@@ -227,12 +229,14 @@ try {
     assert.deepEqual(after.stats,before.stats,`${variant}: native touch orbit creates no image resources`);
     assert.ok(after.state.view.pitch!==0,`${variant}: native touch orbit tilts vertically`);
     await touch.locator('#one .prismdeck-orbit-toggle').tap();
+    await touch.waitForFunction(()=>document.querySelector('#one .prismdeck-orbit-toggle')?.getAttribute('aria-pressed')==='false');
     assert.equal(await touch.locator('#one .prismdeck-orbit-toggle').getAttribute('aria-pressed'),'false');
     for(const label of ['Horizontal view angle','Vertical view angle']) {
       const bounds=await touch.getByLabel(label,{exact:true}).boundingBox();
       assert.ok(bounds&&bounds.width>=80&&bounds.x>=0&&bounds.x+bounds.width<=390,`${variant}: ${label} fits the phone viewport`);
     }
     await touch.getByLabel('Reset view',{exact:true}).tap();
+    await touch.waitForFunction(()=>{const {view}=window.one.controller.getSnapshot();return view.yaw===0&&view.pitch===0;});
     assert.deepEqual(await touch.evaluate(()=>window.one.controller.getSnapshot().view),{yaw:0,pitch:0},`${variant}: phone reset returns the default camera`);
     assert.equal(await touch.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`${variant}: expanded angle controls add no horizontal overflow`);
   }
