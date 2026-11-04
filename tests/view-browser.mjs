@@ -208,16 +208,41 @@ try {
   // Rotate mode is a discoverable one-finger orbit gesture on touch devices.
   const mobile=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true,reducedMotion:'reduce'});
   await mobile.route('**/view-fixture.html',route=>route.fulfill({contentType:'text/html',body:fixture}));
-  const touch=await mobile.newPage();observe(touch);await touch.goto(`${address}/view-fixture.html`);
+  const touch=await mobile.newPage();observe(touch);
+  await touch.addInitScript(()=>{
+    window.touchDiagnostics=[];
+    for(const type of ['pointerdown','pointerup','pointercancel','touchstart','touchend','touchcancel','mousedown','mouseup','click','dblclick'])document.addEventListener(type,event=>{
+      const point=event.touches?.[0]??event.changedTouches?.[0]??event;
+      window.touchDiagnostics.push({type,time:performance.now(),target:event.target.getAttribute?.('class')??event.target.tagName,pointerId:event.pointerId,detail:event.detail,x:point.clientX,y:point.clientY,aria:document.querySelector('.prismdeck-orbit-toggle')?.getAttribute('aria-pressed')});
+    },true);
+  });
+  await touch.goto(`${address}/view-fixture.html`);
   await touch.waitForFunction(()=>window.one&&document.querySelector('#one .prismdeck-pane'));
   const cdp=await mobile.newCDPSession(touch);
-  for (const variant of ['A','B','C']) {
-    await touch.evaluate(variant=>{window.one.update({variant,view:{yaw:0,pitch:0}});window.one.controller.focus(5000);window.one.controller.setZoom(.35);},variant);
-    const toggle=touch.locator('#one .prismdeck-view-toggle');if(await toggle.getAttribute('aria-expanded')!=='true')await toggle.tap();
+  const touchRotate = async (variant,pressed) => {
     await touch.locator('#one .prismdeck-orbit-toggle').tap();
-    // Native touch may deliver the synthesized click after tap() resolves.
-    await touch.waitForFunction(()=>document.querySelector('#one .prismdeck-orbit-toggle')?.getAttribute('aria-pressed')==='true');
+    try {
+      // Native touch may deliver the synthesized click after tap() resolves.
+      await touch.waitForFunction(pressed=>document.querySelector('#one .prismdeck-orbit-toggle')?.getAttribute('aria-pressed')===String(pressed),pressed);
+    } catch(error) {
+      const diagnostic=await touch.evaluate(()=>{
+        const button=document.querySelector('#one .prismdeck-orbit-toggle'),rect=button.getBoundingClientRect();
+        return {events:window.touchDiagnostics,button:{...rect.toJSON(),touchAction:getComputedStyle(button).touchAction,aria:button.getAttribute('aria-pressed')},view:window.one.controller.getSnapshot().view,scrollY};
+      });
+      await mkdir(new URL('../test-results/',import.meta.url),{recursive:true});
+      await writeFile(new URL('../test-results/view-touch-failure.json',import.meta.url),JSON.stringify({variant,expectedPressed:pressed,...diagnostic},null,2));
+      console.error('Native touch Rotate failure:',JSON.stringify({variant,expectedPressed:pressed,...diagnostic}));
+      throw error;
+    }
+  };
+  for (const variant of ['A','B','C']) {
+    await touch.evaluate(variant=>{window.touchDiagnostics=[];window.one.update({variant,view:{yaw:0,pitch:0}});window.one.controller.focus(5000);window.one.controller.setZoom(.35);},variant);
+    const toggle=touch.locator('#one .prismdeck-view-toggle');if(await toggle.getAttribute('aria-expanded')!=='true')await toggle.tap();
+    const rotateBefore=await touch.locator('#one .prismdeck-orbit-toggle').boundingBox();
+    await touchRotate(variant,true);
     assert.equal(await touch.locator('#one .prismdeck-orbit-toggle').getAttribute('aria-pressed'),'true',`${variant}: touch Rotate mode announces its state`);
+    const rotateAfter=await touch.locator('#one .prismdeck-orbit-toggle').boundingBox();
+    assert.ok(rotateBefore&&rotateAfter&&Math.abs(rotateBefore.x+rotateBefore.width/2-rotateAfter.x-rotateAfter.width/2)<=1&&Math.abs(rotateBefore.y+rotateBefore.height/2-rotateAfter.y-rotateAfter.height/2)<=1,`${variant}: activating touch Rotate keeps its button center stable: ${JSON.stringify({before:rotateBefore,after:rotateAfter})}`);
     const box=await touch.locator('#one .prismdeck-viewport').boundingBox(),x=box.x+box.width*.5,y=box.y+box.height*.4;
     const before=await touch.evaluate(()=>({state:window.one.controller.getSnapshot(),stats:{...window.stats.one}}));
     await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});
@@ -228,9 +253,10 @@ try {
     assert.deepEqual(invariant(after.state),invariant(before.state),`${variant}: native touch orbit retains content state`);
     assert.deepEqual(after.stats,before.stats,`${variant}: native touch orbit creates no image resources`);
     assert.ok(after.state.view.pitch!==0,`${variant}: native touch orbit tilts vertically`);
-    await touch.locator('#one .prismdeck-orbit-toggle').tap();
-    await touch.waitForFunction(()=>document.querySelector('#one .prismdeck-orbit-toggle')?.getAttribute('aria-pressed')==='false');
+    await touchRotate(variant,false);
     assert.equal(await touch.locator('#one .prismdeck-orbit-toggle').getAttribute('aria-pressed'),'false');
+    const rotateReturned=await touch.locator('#one .prismdeck-orbit-toggle').boundingBox();
+    assert.ok(rotateBefore&&rotateReturned&&Math.abs(rotateBefore.x+rotateBefore.width/2-rotateReturned.x-rotateReturned.width/2)<=1&&Math.abs(rotateBefore.y+rotateBefore.height/2-rotateReturned.y-rotateReturned.height/2)<=1,`${variant}: deactivating touch Rotate keeps its button center stable: ${JSON.stringify({before:rotateBefore,after:rotateReturned})}`);
     for(const label of ['Horizontal view angle','Vertical view angle']) {
       const bounds=await touch.getByLabel(label,{exact:true}).boundingBox();
       assert.ok(bounds&&bounds.width>=80&&bounds.x>=0&&bounds.x+bounds.width<=390,`${variant}: ${label} fits the phone viewport`);

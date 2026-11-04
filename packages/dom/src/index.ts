@@ -98,7 +98,7 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
   let orbitMode = false;
   const viewToggle = button('View angle', 'View angle', () => {
     viewPanel.hidden = !viewPanel.hidden; viewToggle.setAttribute('aria-expanded', String(!viewPanel.hidden));
-    if (!viewPanel.hidden) yawInput.focus({preventScroll: true});
+    if (!viewPanel.hidden) { positionViewPanel(); yawInput.focus({preventScroll: true}); }
   });
   viewToggle.className = 'prismdeck-view-toggle'; viewToggle.setAttribute('aria-expanded', 'false');
   const viewPanel = document.createElement('section'); viewPanel.className = 'prismdeck-view-panel'; viewPanel.hidden = true;
@@ -313,6 +313,11 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
       width: mix(pose.width, readingWidth), height: mix(pose.height, readingWidth * 9 / 16),
       rotateZ: pose.rotateZ * (1 - amount), scale: mix(pose.scale, 1), zIndex: 100}, amount);
   }
+  function positionViewPanel() {
+    const preferred = controls.offsetHeight + status.offsetHeight + 8;
+    const room = Math.max(8, element.clientHeight - viewPanel.offsetHeight - 8);
+    viewPanel.style.bottom = `${Math.min(preferred, room)}px`;
+  }
   function updateOrbitMode() {
     orbitToggle.setAttribute('aria-pressed', String(orbitMode));
     element.dataset.prismdeckOrbit = String(orbitMode);
@@ -438,7 +443,7 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     element.dataset.prismdeckView = JSON.stringify(state.view);
     viewToggle.hidden = options.cameraControls === false;
     if (options.cameraControls === false) { viewPanel.hidden = true; orbitMode = false; updateOrbitMode(); viewToggle.setAttribute('aria-expanded', 'false'); }
-    viewPanel.style.bottom = `${controls.offsetHeight + status.offsetHeight + 8}px`;
+    positionViewPanel();
     yawInput.value = String(state.view.yaw); pitchInput.value = String(state.view.pitch);
     yawValue.value = state.view.yaw > 0 ? `R ${Math.round(state.view.yaw)}` : state.view.yaw < 0 ? `L ${Math.round(-state.view.yaw)}` : 'Center';
     pitchValue.value = state.view.pitch > 0 ? `Up ${Math.round(state.view.pitch)}` : state.view.pitch < 0 ? `Down ${Math.round(-state.view.pitch)}` : 'Level';

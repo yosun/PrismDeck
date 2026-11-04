@@ -83,11 +83,11 @@ The standalone browser bundle needs no build tool or framework:
 ```
 
 For production, download and self-host the browser bundle and stylesheet from a
-[pinned release](https://github.com/yosun/PrismDeck/releases/tag/v0.4.0). GitHub
+[pinned release](https://github.com/yosun/PrismDeck/releases/tag/v0.4.1). GitHub
 Pages follows the current demo build. The bundle contains the DOM widget and core;
 it does not include React, Three.js, or XR. All three presets use
 the same bounded content window; the wallet adds no image resources or renderer
-dependency. The standalone build is approximately 11.8 KB of gzipped JavaScript
+dependency. The standalone build is approximately 11.9 KB of gzipped JavaScript
 plus a 2.4 KB gzipped stylesheet.
 
 ## Packages
@@ -100,7 +100,7 @@ plus a 2.4 KB gzipped stylesheet.
 | `@prismdeck/three` | Optional WebGL image renderer | Core; Three.js peer |
 | `@prismdeck/three/xr` | Explicit, lazy XR helpers | Optional Three.js renderer |
 
-The packages are prepared as version **0.4.0**. This repository does not imply
+The packages are prepared as version **0.4.1**. This repository does not imply
 that the names are available from the npm registry. Build local distributable
 tarballs with:
 
@@ -112,14 +112,14 @@ Install the generated tarballs in your application. Install core first, then the
 renderer or binding you use:
 
 ```sh
-npm install /path/to/PrismDeck/.artifacts/prismdeck-core-0.4.0.tgz
-npm install /path/to/PrismDeck/.artifacts/prismdeck-dom-0.4.0.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-core-0.4.1.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-dom-0.4.1.tgz
 # For React applications:
 npm install react react-dom
-npm install /path/to/PrismDeck/.artifacts/prismdeck-react-0.4.0.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-react-0.4.1.tgz
 # For optional Three.js rendering:
 npm install three
-npm install /path/to/PrismDeck/.artifacts/prismdeck-three-0.4.0.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-three-0.4.1.tgz
 ```
 
 ## React
