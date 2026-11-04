@@ -12,9 +12,10 @@ import { createPortal } from 'react-dom';
 import { createPrismDeck } from '@prismdeck/dom';
 import type { PrismDeckInstance, PrismDeckOptions } from '@prismdeck/dom';
 
-export type PrismDeckProps<T> = Omit<PrismDeckOptions<T>, 'renderPane'> & {
+export type PrismDeckProps<T> = Omit<PrismDeckOptions<T>, 'renderPane' | 'renderSelection'> & {
   /** React content is portaled into the visible panes; offscreen panes unmount. */
   renderPane: (item: T, index: number) => ReactNode;
+  renderSelection?: (item: T, index: number) => ReactNode;
   style?: CSSProperties;
   id?: string;
   /** Receives the live widget, including its framework-independent controller. */
@@ -23,6 +24,7 @@ export type PrismDeckProps<T> = Omit<PrismDeckOptions<T>, 'renderPane'> & {
 
 interface PortalPane<T> {
   id: string;
+  kind: 'pane' | 'selection';
   item: T;
   index: number;
   element: HTMLElement;
@@ -38,22 +40,20 @@ export function PrismDeck<T>(props: PrismDeckProps<T>): ReactElement {
   const latest = useRef(props);
   const generation = useRef(0);
   const nextId = useRef(0);
+  const selectionRenderer = useRef<PrismDeckOptions<T>['renderSelection']>(undefined);
   const [panes, setPanes] = useState<Map<string, PortalPane<T>>>(() => new Map());
   latest.current = props;
 
   useClientLayoutEffect(() => {
     if (!mount.current) return;
     const currentGeneration = ++generation.current;
-    const deck = createPrismDeck(mount.current, {
-      ...latest.current,
-      className: undefined,
-      renderPane(item, index) {
+    const render = (kind: 'pane' | 'selection') => (item: T, index: number) => {
         const element = mount.current!.ownerDocument.createElement('div');
         element.style.cssText = 'width:100%;height:100%;overflow:hidden;';
         const id = String(++nextId.current);
         setPanes((previous) => {
           const next = new Map(previous);
-          next.set(id, { id, item, index, element });
+          next.set(id, { id, kind, item, index, element });
           return next;
         });
         return {
@@ -68,10 +68,17 @@ export function PrismDeck<T>(props: PrismDeckProps<T>): ReactElement {
             });
           },
         };
-      },
+    };
+    selectionRenderer.current = render('selection');
+    const deck = createPrismDeck(mount.current, {
+      ...latest.current,
+      className: undefined,
+      renderPane: render('pane'),
+      renderSelection: latest.current.renderSelection ? selectionRenderer.current : undefined,
       onFocus: (item, index) => latest.current.onFocus?.(item, index),
       onSelect: (item, index) => latest.current.onSelect?.(item, index),
       onDismiss: () => latest.current.onDismiss?.(),
+      onActivate: (item, index) => latest.current.onActivate?.(item, index),
     });
     instance.current = deck;
     latest.current.onReady?.(deck);
@@ -95,8 +102,14 @@ export function PrismDeck<T>(props: PrismDeckProps<T>): ReactElement {
       maxVisible: props.maxVisible,
       label: props.label,
       controls: props.controls,
+      variant: props.variant,
+      selectionMode: props.selectionMode,
+      prismLines: props.prismLines,
+      timelineRails: props.timelineRails,
+      transitionDuration: props.transitionDuration,
+      renderSelection: props.renderSelection ? selectionRenderer.current : undefined,
     });
-  }, [props.items, props.getKey, props.adapter, props.axis, props.maxVisible, props.label, props.controls]);
+  }, [props.items, props.getKey, props.adapter, props.axis, props.maxVisible, props.label, props.controls, props.variant, props.selectionMode, props.prismLines, props.timelineRails, props.transitionDuration, !!props.renderSelection]);
 
   return createElement(
     Fragment,
@@ -108,7 +121,7 @@ export function PrismDeck<T>(props: PrismDeckProps<T>): ReactElement {
       style: { width: '100%', height: '100%', minHeight: 280, ...props.style },
     }),
     ...Array.from(panes.values(), (pane) =>
-      createPortal(props.renderPane(pane.item, pane.index), pane.element, pane.id),
+      createPortal(pane.kind === 'selection' && props.renderSelection ? props.renderSelection(pane.item, pane.index) : props.renderPane(pane.item, pane.index), pane.element, pane.id),
     ),
   );
 }
@@ -135,3 +148,6 @@ export function usePrismDeck<T>(controller: PrismDeckInstance<T>['controller'] |
 }
 
 export type { PrismDeckInstance, PrismDeckOptions } from '@prismdeck/dom';
+
+export { PRISMDECK_PRESETS } from '@prismdeck/dom';
+export type { PrismDeckVariant, PrismDeckSelectionMode, PrismDeckPresentationOptions } from '@prismdeck/dom';

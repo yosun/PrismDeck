@@ -1,4 +1,5 @@
-import { createPrismDeck } from '@prismdeck/dom';
+import { createPrismDeck, PRISMDECK_PRESETS as presets } from '@prismdeck/dom';
+import type { PrismDeckVariant as Variant, PrismDeckSelectionMode as SelectionMode } from '@prismdeck/dom';
 import '@prismdeck/dom/style.css';
 import './style.css';
 
@@ -31,10 +32,13 @@ function element<T extends HTMLElement>(id: string): T {
   return result as T;
 }
 
-const paneDialog = element<HTMLDialogElement>('pane-dialog');
 const spatialDialog = element<HTMLDialogElement>('spatial-dialog');
 const sequence = element<HTMLInputElement>('sequence');
 const collectionSize = element<HTMLSelectElement>('collection-size');
+const prismLines = element<HTMLInputElement>('prism-lines');
+const timelineRails = element<HTMLInputElement>('timeline-rails');
+const selectionMode = element<HTMLSelectElement>('selection-mode');
+let variant: Variant = new URL(location.href).searchParams.get('variant') === 'B' ? 'B' : 'A';
 let slides = collection(1000);
 let focused = slides[0];
 
@@ -48,13 +52,24 @@ function updateFocus(slide: Slide, index: number) {
 }
 
 function selectSlide(slide: Slide, index: number) {
-  element('dialog-title').textContent = slide.title;
-  element('dialog-kicker').textContent = slide.category;
-  const image = element<HTMLImageElement>('dialog-image');
-  image.src = imageSource(slide);
-  image.alt = `${slide.title}, synthetic landscape study ${slide.index + 1}`;
-  element('dialog-position').textContent = `${index + 1} / ${slides.length.toLocaleString()}`;
-  if (!paneDialog.open) paneDialog.showModal();
+  element('selection-status').textContent = `Selected ${index + 1}: ${slide.title}. Select it again to activate.`;
+}
+
+function describeSelection() {
+  element('variant-description').textContent = selectionMode.value === 'slide-out'
+    ? 'Slide a pane out of the prism. Keep your place in the collection.'
+    : selectionMode.value === 'modal'
+      ? 'Open a pane in a modal. Return to the deck when you are ready.'
+      : 'Select a pane while keeping the collection in view.';
+}
+
+function showVariant() {
+  element('version-a').setAttribute('aria-pressed', String(variant === 'A'));
+  element('version-b').setAttribute('aria-pressed', String(variant === 'B'));
+  prismLines.checked = presets[variant].prismLines;
+  timelineRails.checked = presets[variant].timelineRails;
+  selectionMode.value = presets[variant].selectionMode;
+  describeSelection();
 }
 
 const deck = createPrismDeck(element('deck'), {
@@ -71,7 +86,10 @@ const deck = createPrismDeck(element('deck'), {
     return image;
   },
   onFocus: updateFocus,
+  variant,
   onSelect: selectSlide,
+  onActivate: (slide) => { element('selection-status').textContent = `Activated “${slide.title}”.`; },
+  onDismiss: () => { element('selection-status').textContent = 'Back in the deck. Select another pane to explore.'; },
   maxVisible: 40,
   label: 'Studies in perspective. Browse ordered slides.',
 });
@@ -96,10 +114,29 @@ function setCollection(count: number) {
 collectionSize.addEventListener('change', () => setCollection(Number(collectionSize.value)));
 sequence.addEventListener('input', () => deck.controller.focus(Number(sequence.value)));
 element('open-pane').addEventListener('click', () => deck.controller.select());
-element('close-pane').addEventListener('click', () => paneDialog.close());
-paneDialog.addEventListener('close', () => deck.controller.dismiss());
-element('previous-pane').addEventListener('click', () => { deck.controller.move(-1); deck.controller.select(); });
-element('next-pane').addEventListener('click', () => { deck.controller.move(1); deck.controller.select(); });
+function setVariant(next: Variant) {
+  variant = next;
+  deck.controller.dismiss();
+  // Clearing overrides makes each version a preset, not a separate widget.
+  deck.update({ variant, selectionMode: undefined, prismLines: undefined, timelineRails: undefined });
+  showVariant();
+  element('selection-status').textContent = 'Select a pane to bring it into view.';
+  const url = new URL(location.href);
+  url.searchParams.set('variant', variant);
+  history.replaceState(history.state, '', url);
+}
+element('version-a').addEventListener('click', () => setVariant('A'));
+element('version-b').addEventListener('click', () => setVariant('B'));
+prismLines.addEventListener('change', () => deck.update({ prismLines: prismLines.checked }));
+timelineRails.addEventListener('change', () => deck.update({ timelineRails: timelineRails.checked }));
+selectionMode.addEventListener('change', () => {
+  deck.update({ selectionMode: selectionMode.value as SelectionMode });
+  describeSelection();
+  element('selection-status').textContent = selectionMode.value === 'none'
+    ? 'Selection is app-defined. This example reports the selected pane here.'
+    : 'Select a pane to bring it into view.';
+});
+showVariant();
 updateFocus(focused, 0);
 
 // Explicit opt-in is the boundary: the ordinary demo imports neither Three nor XR.
@@ -115,7 +152,7 @@ element('spatial-button').addEventListener('click', async () => {
     const { createThreePrismDeck } = await import('@prismdeck/three');
     if (!spatialDialog.open) return;
     spatial = createThreePrismDeck(element('spatial-stage'), { controller: deck.controller, getImage: imageSource });
-    element('render-status').textContent = '40 mounted panes maximum · Optional spatial renderer loaded';
+    element('render-status').textContent = '40 preview panes maximum · Optional spatial renderer loaded';
     const xr = navigator.xr;
     const supported = xr ? await xr.isSessionSupported('immersive-vr').catch(() => false) : false;
     if (!spatialDialog.open) return;
@@ -144,7 +181,7 @@ spatialDialog.addEventListener('close', () => {
   spatial?.dispose();
   spatial = undefined;
   element('enter-xr').hidden = true;
-  element('render-status').textContent = `40 mounted panes maximum · ${xrLoaded ? 'Optional XR loaded by request' : 'Zero XR loaded'}`;
+  element('render-status').textContent = `40 preview panes maximum · ${xrLoaded ? 'Optional XR loaded by request' : 'Zero XR loaded'}`;
 });
 
 // Public handles are useful for browser tests and experimenting in DevTools.

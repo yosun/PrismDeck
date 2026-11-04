@@ -56,7 +56,7 @@ try {
   await page.keyboard.press('Enter');
   assert.equal((await snapshot()).selectedKey,'study-0');
   await page.keyboard.press('Escape');
-  await page.waitForFunction(()=>!document.querySelector('#pane-dialog').open);
+  await page.waitForFunction(()=>window.deck.controller.getSnapshot().selectedKey===null);
   await page.evaluate(()=>{window.deck.controller.setZoom(1);});
   await page.waitForTimeout(500);
   assert.ok(await page.locator('.prismdeck-pane').count()<=40,'overview stays bounded');

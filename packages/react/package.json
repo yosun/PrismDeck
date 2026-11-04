@@ -1,6 +1,6 @@
 {
   "name": "@prismdeck/react",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "React component and hooks for PrismDeck",
   "type": "module",
   "license": "MIT",
@@ -29,8 +29,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@prismdeck/core": "0.1.0",
-    "@prismdeck/dom": "0.1.0"
+    "@prismdeck/core": "0.2.0",
+    "@prismdeck/dom": "0.2.0"
   },
   "peerDependencies": {
     "react": ">=18",

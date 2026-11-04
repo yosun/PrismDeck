@@ -2,14 +2,16 @@
 
 A lightweight, open-source 3D navigation component for large collections of
 ordered images and visual content. Browse a volume of parallel panes, focus one,
-and let your application decide what selection does.
+and bring it into view with a seamless slide-out or a modal.
 
 Use it for slide decks, photo archives, PDF pages, video frames, version histories,
 medical slices, scientific datasets, or spatial galleries. An axis can mean
 sequence, depth, time, version, or any numerical position.
 
 - **Small default path:** no third-party runtime dependencies in core or DOM.
-- **Bounded rendering:** thousands of items, at most 40 mounted panes by default.
+- **Bounded rendering:** thousands of items, up to 40 preview panes by default.
+- **Modular presentation:** choose seamless slide-out or modal; switch prism lines
+  and timeline rails independently.
 - **Content stays yours:** render DOM or React content; supply your own actions.
 - **Progressive spatial support:** Three.js and XR are separate, optional imports.
 - **Built for input:** keyboard, pointer, touch, pinch, and zoom controls.
@@ -33,7 +35,10 @@ npm run dev
 
 Open the local Vite URL. The demo generates 1,000 slides locally and can switch to
 10,000 items. No account, image service, API key, or external image host is needed.
-Run `npm run dev:react` for the React example.
+The default is **Version A**. Try the **Version B** switch for modal selection, or
+share a demo URL ending in `?variant=A` or `?variant=B`. The checkboxes and selection
+menu let you mix each option independently. Run `npm run dev:react` for the React
+example.
 
 ## Drop into any page
 
@@ -57,15 +62,18 @@ The standalone browser bundle needs no build tool or framework:
       image.alt = item.title;
       return image;
     },
-    onSelect: (item) => console.log('Open', item.id),
+    variant: 'A', // Seamless slide-out, prism lines, and timeline rails.
+    onSelect: (item) => console.log('Selected', item.id),
+    onActivate: (item) => console.log('Activate', item.id),
   });
 </script>
 ```
 
 For production, download and self-host the browser bundle and stylesheet from a
-[pinned release](https://github.com/yosun/PrismDeck/releases/tag/v0.1.0). GitHub
+[pinned release](https://github.com/yosun/PrismDeck/releases/tag/v0.2.0). GitHub
 Pages follows the current demo build. The bundle contains the DOM widget and core;
-it does not include React, Three.js, or XR.
+it does not include React, Three.js, or XR. The current standalone build is about
+8 KB of gzipped JavaScript plus a 1.7 KB gzipped stylesheet.
 
 ## Packages
 
@@ -77,7 +85,7 @@ it does not include React, Three.js, or XR.
 | `@prismdeck/three` | Optional WebGL image renderer | Core; Three.js peer |
 | `@prismdeck/three/xr` | Explicit, lazy XR helpers | Optional Three.js renderer |
 
-The packages are prepared as version **0.1.0**. This repository does not imply
+The packages are prepared as version **0.2.0**. This repository does not imply
 that the names are available from the npm registry. Build local distributable
 tarballs with:
 
@@ -89,14 +97,14 @@ Install the generated tarballs in your application. Install core first, then the
 renderer or binding you use:
 
 ```sh
-npm install /path/to/PrismDeck/.artifacts/prismdeck-core-0.1.0.tgz
-npm install /path/to/PrismDeck/.artifacts/prismdeck-dom-0.1.0.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-core-0.2.0.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-dom-0.2.0.tgz
 # For React applications:
 npm install react react-dom
-npm install /path/to/PrismDeck/.artifacts/prismdeck-react-0.1.0.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-react-0.2.0.tgz
 # For optional Three.js rendering:
 npm install three
-npm install /path/to/PrismDeck/.artifacts/prismdeck-three-0.1.0.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-three-0.2.0.tgz
 ```
 
 ## React
@@ -105,14 +113,16 @@ npm install /path/to/PrismDeck/.artifacts/prismdeck-three-0.1.0.tgz
 import { PrismDeck } from '@prismdeck/react';
 import '@prismdeck/dom/style.css';
 
-export function SlideBrowser({ items, handleFocus, handleSelect }) {
+export function SlideBrowser({ items, handleFocus, handleSelect, openEditor }) {
   return (
     <PrismDeck
       items={items}
       getKey={(item) => item.id}
       renderPane={(item) => <MyContent item={item} />}
+      variant="A"
       onFocus={handleFocus}
       onSelect={handleSelect}
+      onActivate={openEditor}
     />
   );
 }
@@ -143,7 +153,9 @@ const deck = createPrismDeck(document.querySelector('#deck'), {
     return image;
   },
   onFocus: (slide, index) => updateStatus(slide, index),
-  onSelect: (slide) => openSlide(slide),
+  variant: 'A',
+  onSelect: (slide) => updateSelection(slide),
+  onActivate: (slide) => openEditor(slide),
   maxVisible: 40,
   label: 'Browse presentation slides',
 });
@@ -160,6 +172,54 @@ text string, or `{ element: Node, dispose?: () => void }`. Strings are treated a
 text. Use the cleanup callback for application resources such as media streams,
 object URLs, or custom subscriptions.
 
+## Two versions, independent options
+
+**Version A — Seamless slide-out** follows WOMDeck's original DeckStream flow.
+The selected pane slides out along its perpendicular axis while the view turns
+to face it. The collection stays in view as a compact prism, with vanishing-point
+rectangular prism lines and timeline rails. The pane itself becomes the detail
+view; no modal interrupts the transition.
+
+**Version B — Modal** opens the selected pane in a modal and hides prism lines
+and timeline rails. Escape, the backdrop, or the close button returns to browsing.
+
+| Preset | Selection | Prism lines | Timeline rails |
+| --- | --- | --- | --- |
+| `variant: 'A'` (default) | `'slide-out'` | `true` | `true` |
+| `variant: 'B'` | `'modal'` | `false` | `false` |
+
+Versions are convenience presets on the same component. Each explicit option
+independently overrides its preset, so a modal can have rails or a slide-out can
+hide the prism outline:
+
+```ts
+const deck = createPrismDeck(mount, {
+  items,
+  getKey: (item) => item.id,
+  renderPane,
+  variant: 'B',
+  prismLines: true,
+  timelineRails: true,
+  // selectionMode: 'slide-out' | 'modal' | 'none',
+});
+
+// Change individual options without rebuilding the widget.
+deck.update({ timelineRails: false, selectionMode: 'slide-out' });
+// Clear an override to return that option to the current preset.
+deck.update({ selectionMode: undefined });
+```
+
+`selectionMode: 'none'` keeps selection state and callbacks while leaving its
+presentation to your application. `onSelect` observes selection; an optional
+`onActivate` handles a second activation of the selected pane, such as opening an
+editor. PrismDeck itself does not attach application meaning to either event.
+
+By default, both presentations reuse the selected pane's mounted content. Supply
+`renderSelection(item, index)` only when its detail view needs different content,
+such as a full-resolution image. DOM uses the same return types as `renderPane`;
+React accepts React content. This optional detail renderer creates at most one
+additional content resource and disposes it when selection closes or changes.
+
 ## Widget options
 
 | Option | Meaning |
@@ -168,10 +228,18 @@ object URLs, or custom subscriptions.
 | `getKey(item)` | Stable, unique string or number identity |
 | `renderPane(item, index)` | Lazily creates content for a visible pane |
 | `onFocus(item, index)` | Called when navigation focuses a pane |
-| `onSelect(item, index)` | Called when a pane is activated |
+| `onSelect(item, index)` | Called when a pane is selected |
+| `onActivate(item, index)` | Optional action when the selected pane is activated again |
+| `variant` | `'A'` (default) or `'B'`; selects presentation defaults |
+| `selectionMode` | `'slide-out'`, `'modal'`, or `'none'`; overrides the preset |
+| `prismLines` | Show the vanishing-point rectangular prism outline; overrides the preset |
+| `timelineRails` | Show rails along the ordered axis; overrides the preset |
+| `transitionDuration` | Approximate slide-out settling time in milliseconds; defaults to `700`, or `0` for instant |
+| `renderSelection(item, index)` | Optional lazy detail content; defaults to reusing the selected pane |
+| `onDismiss()` | Called when the built-in selection view is dismissed |
 | `adapter` | Optional `{ getKey, getPosition?, getLabel? }` metadata adapter |
 | `axis` | Optional `{ label, unit }` description of the ordered dimension |
-| `maxVisible` | Maximum mounted panes; defaults to `40` |
+| `maxVisible` | Maximum preview panes; defaults to `40` |
 | `initialFocus` | Initial focused index |
 | `initialZoom` | Initial navigation zoom: `0` for close view, `1` for compact overview |
 | `controls` | Whether to show the built-in navigation controls |
@@ -192,7 +260,7 @@ createPrismDeck(mount, {
   },
   axis: { label: 'Depth', unit: 'mm' },
   renderPane: (slice) => makeSlicePreview(slice),
-  onSelect: (slice) => inspectSlice(slice),
+  onActivate: (slice) => inspectSlice(slice),
 });
 ```
 
@@ -254,13 +322,13 @@ Focus the widget, then use:
 | Arrow keys | Move through the ordered panes |
 | Home / End | First / last pane |
 | `+` / `-` | Change zoom and pane density |
-| Enter | Select the focused pane |
+| Enter | Select the focused pane; activate it again for the optional app action |
 | Escape | Dismiss selection |
 | Pointer or touch | Focus and activate a pane |
 | Pinch or zoom slider | Adjust the prism's density |
 
 Zoom lets a collection occupy a more compact volume while preserving navigation.
-The rendering budget remains bounded by `maxVisible`. Applications can offer a
+The preview rendering budget remains bounded by `maxVisible`. Applications can offer a
 larger budget when the device and content can support it. Respect reduced motion
 and provide meaningful item labels through the adapter.
 

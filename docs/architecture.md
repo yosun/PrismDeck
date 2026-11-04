@@ -14,7 +14,7 @@ The geometry does not attach meaning to those surfaces.
 ## Layers
 
 ```text
-Application content and selection actions
+Application content and activation actions
                   │
          React binding (optional)
                   │
@@ -61,12 +61,42 @@ content when selected. `renderPane` may return an element with a `dispose`
 callback to release application-owned resources. Dispose the deck when its host
 is removed to release listeners, content, and renderer resources.
 
-## Focus and selection
+## Focus, selection, and presentation
 
-Focus navigates the collection. Selection invokes an optional application action:
-opening a slide, inspecting a scan, or comparing a version. PrismDeck does not
-open routes, dialogs, editors, or network requests on behalf of the application.
-The demos implement a selection dialog to show where this behavior belongs.
+Focus navigates the collection. Selection records a pane's stable key. Presentation
+is a renderer concern: the core controller and geometry never know about a modal,
+a slide editor, or an application route.
+
+The DOM renderer supplies independent presentation options:
+
+- `selectionMode` chooses `'slide-out'`, `'modal'`, or `'none'`.
+- `prismLines` controls the perspective rectangular prism outline.
+- `timelineRails` controls rails along the ordered axis. Their geometry follows
+  the axis; it does not require chronological content.
+
+Version A combines slide-out, prism lines, and rails. Version B combines modal
+selection with both line systems hidden. They are presets, so each explicit
+option overrides its preset independently. React forwards the same options into
+the DOM renderer. Neither preset changes adapters, navigation, content, or XR
+loading.
+
+The slide-out keeps WOMDeck's continuous deck-to-pane interaction: selection
+moves the existing pane into a separate presentation layer, translates it along
+the perpendicular axis, and interpolates a separate camera to face it. The
+archive shrinks into the upper-left portion of the view, preserving context.
+It does not replace the pane with a second image or open an overlay dialog.
+
+The modal presentation moves the same selected pane into a native dialog.
+Dismissal restores the pane and focus. A caller can provide `renderSelection`
+when preview and detail content differ; this creates one separately bounded
+content resource and disposes it when selection changes or closes. The default
+path reuses the pane resource.
+
+`onSelect` observes the selected item. An optional `onActivate` handles another
+activation of the already selected pane; an application may use it to open an
+editor, inspect a scan, or compare versions. Setting `selectionMode: 'none'`
+leaves the entire detail interface to the application. PrismDeck does not choose
+routes, application actions, or network requests.
 
 ## Accessibility
 

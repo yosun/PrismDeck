@@ -10,7 +10,7 @@
   <body>
     <div class="page-shell">
       <header class="site-header">
-        <a class="brand" href="./" aria-label="PrismDeck home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>PrismDeck<span class="version">0.1</span></a>
+        <a class="brand" href="./" aria-label="PrismDeck home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>PrismDeck<span class="version">0.2</span></a>
         <nav aria-label="Project links"><a href="https://github.com/yosun/PrismDeck#readme">Documentation <span aria-hidden="true">↗</span></a><a href="https://github.com/yosun/PrismDeck">GitHub <span aria-hidden="true">↗</span></a></nav>
       </header>
 
@@ -22,18 +22,30 @@
 
         <section class="gallery" aria-labelledby="collection-title">
           <div class="gallery-topbar"><div><p class="eyebrow">THE COLLECTION</p><h2 id="collection-title">Studies in perspective <span id="collection-count">1,000 panes</span></h2></div><label class="collection-picker">Collection size <select id="collection-size"><option value="100">100 panes</option><option value="1000" selected>1,000 panes</option><option value="10000">10,000 panes</option></select></label></div>
+          <div class="experience-controls">
+            <div class="variant-switch" role="group" aria-label="Selection experience">
+              <button id="version-a" type="button" aria-pressed="true"><strong>Version A</strong><span>Seamless slide-out</span></button>
+              <button id="version-b" type="button" aria-pressed="false"><strong>Version B</strong><span>Modal</span></button>
+            </div>
+            <p class="variant-description" id="variant-description">Slide a pane out of the prism. Keep your place in the collection.</p>
+            <div class="feature-controls" role="group" aria-label="Independent display options">
+              <label><input id="prism-lines" type="checkbox" checked /> Prism lines</label>
+              <label><input id="timeline-rails" type="checkbox" checked /> Timeline rails</label>
+              <label class="selection-mode-label">Selection <select id="selection-mode"><option value="slide-out">Slide-out</option><option value="modal">Modal</option><option value="none">App-defined</option></select></label>
+            </div>
+          </div>
           <div class="deck-stage"><div class="stage-label"><span class="live-dot"></span> LIVE PRISM <span class="stage-hint">Drag · Scroll · Pinch</span></div><div id="deck" aria-label="Interactive slide collection"></div><span class="stage-axis" aria-hidden="true">SEQUENCE →</span></div>
-          <div class="selection-bar"><div class="focus-info"><span class="focus-number" id="focus-number">001</span><div><p class="eyebrow" id="focus-kicker">FORM &amp; SPACE</p><h3 id="focus-title">Contours of tomorrow</h3></div></div><button class="primary-button" id="open-pane">Open pane <span aria-hidden="true">↗</span></button></div>
+          <div class="selection-bar"><div class="focus-info"><span class="focus-number" id="focus-number">001</span><div><p class="eyebrow" id="focus-kicker">FORM &amp; SPACE</p><h3 id="focus-title">Contours of tomorrow</h3></div></div><button class="primary-button" id="open-pane">View pane <span aria-hidden="true">↗</span></button></div>
+          <p class="selection-status" id="selection-status" role="status">Select a pane to bring it into view.</p>
           <div class="sequence-control"><span id="sequence-position">1 / 1,000</span><input id="sequence" type="range" min="0" max="999" value="0" aria-label="Jump to a pane" /><span>ORDERED, NOT OVERWHELMING</span></div>
         </section>
 
-        <section class="below-gallery" aria-label="How it works"><div class="input-help"><span class="keycap">←</span><span class="keycap">→</span><span>Navigate</span><span class="keycap">+ / −</span><span>Density</span><span class="keycap">↵</span><span>Open</span></div><p id="render-status">40 mounted panes maximum · Zero XR loaded</p></section>
+        <section class="below-gallery" aria-label="How it works"><div class="input-help"><span class="keycap">←</span><span class="keycap">→</span><span>Navigate</span><span class="keycap">+ / −</span><span>Density</span><span class="keycap">↵</span><span>Select</span></div><p id="render-status">40 preview panes maximum · Zero XR loaded</p></section>
         <section class="library-note"><div><p class="eyebrow">YOUR CONTENT. A NEW PERSPECTIVE.</p><p>Slides, photographs, pages, slices, versions.<br />One small widget. Any ordered collection.</p></div><div class="spatial-option"><button class="text-button" id="spatial-button">Try optional spatial / XR view <span aria-hidden="true">↗</span></button><p id="xr-status">Three.js and XR stay unloaded until you opt in.</p></div></section>
       </main>
       <footer><span>PrismDeck <span class="footer-dot">·</span> MIT licensed</span><span>Built to give your content room.</span></footer>
     </div>
 
-    <dialog id="pane-dialog" class="pane-dialog"><div class="dialog-heading"><div><p class="eyebrow" id="dialog-kicker">SELECTED PANE</p><h2 id="dialog-title">Pane details</h2></div><button class="icon-button" id="close-pane" aria-label="Close pane">×</button></div><img id="dialog-image" alt="" /><p class="dialog-note">This detail view belongs to the example application. PrismDeck supplies the selection event.</p><div class="dialog-actions"><button class="text-button" id="previous-pane">← Previous</button><span id="dialog-position"></span><button class="text-button" id="next-pane">Next →</button></div></dialog>
     <dialog id="spatial-dialog" class="spatial-dialog"><div class="dialog-heading"><div><p class="eyebrow">OPTIONAL RENDERER</p><h2>Same collection. Spatial view.</h2></div><button class="icon-button" id="close-spatial" aria-label="Close spatial view">×</button></div><div id="spatial-stage"></div><div class="spatial-toolbar"><p id="spatial-message" role="status">Loading the optional renderer…</p><button class="primary-button" id="enter-xr" hidden>Enter XR</button></div></dialog>
     <script type="module" src="./main.ts"></script>
   </body>

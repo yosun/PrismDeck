@@ -115,7 +115,7 @@ Exported types include `PrismKey`, `PrismVector3`, `PrismAxis`, `PrismAdapter<T>
 ## DOM
 
 ```ts
-import { createPrismDeck } from '@prismdeck/dom';
+import { createPrismDeck, PRISMDECK_PRESETS, resolvePresentationOptions } from '@prismdeck/dom';
 ```
 
 ### `createPrismDeck<T>(mount, options)`
@@ -125,11 +125,64 @@ import { createPrismDeck } from '@prismdeck/dom';
 | Option | Behavior |
 | --- | --- |
 | `renderPane(item, index)` | Returns a `Node`, plain text string, or `{ element: Node, dispose?: () => void }` |
-| `maxVisible` | Maximum mounted panes; defaults to `40` |
+| `variant` | `'A'` (default) or `'B'`; selects presentation defaults |
+| `selectionMode` | `'slide-out'`, `'modal'`, or `'none'`; overrides the preset |
+| `prismLines` | Boolean override for the perspective rectangular prism outline |
+| `timelineRails` | Boolean override for rails along the ordered axis |
+| `transitionDuration` | Approximate slide-out settling time in milliseconds; finite and nonnegative, default `700`; `0` is instant |
+| `renderSelection(item, index)` | Optional detail content, with the same return types as `renderPane`; otherwise the selected pane's content is reused |
+| `onActivate(item, index)` | Optional second activation of the already selected pane |
+| `maxVisible` | Maximum preview panes; defaults to `40` |
 | `controls` | Built-in keyboard-accessible toolbar; defaults to `true` |
 | `label` | Accessible widget label; defaults to `'PrismDeck'` |
 | `className` | Additional root CSS class |
-| `onDismiss()` | Optional callback when Escape dismisses selection in the widget |
+| `onDismiss()` | Optional callback when the built-in selection presentation closes |
+
+### Presentation presets and overrides
+
+| Version | `selectionMode` | `prismLines` | `timelineRails` |
+| --- | --- | --- | --- |
+| `'A'` (default) | `'slide-out'` | `true` | `true` |
+| `'B'` | `'modal'` | `false` | `false` |
+
+`PRISMDECK_PRESETS` exports the immutable preset values.
+`resolvePresentationOptions(options)` returns the resolved variant, mode, line
+options, and transition duration, and validates the variant, mode, and duration.
+Reduced motion always takes precedence over `transitionDuration`.
+
+Every explicit option takes precedence over its preset independently. Change a
+preset or individual options through `update`; pass `undefined` to clear an
+override and use the current preset again. These options belong to the DOM and
+React presentation layers; the headless controller has no UI version.
+
+```ts
+const deck = createPrismDeck(mount, {
+  items, getKey, renderPane,
+  variant: 'B',
+  timelineRails: true, // Modal selection with rails; prism lines stay hidden.
+});
+deck.update({ selectionMode: 'slide-out' });
+deck.update({ selectionMode: undefined }); // Return to Version B's modal.
+```
+
+`'slide-out'` moves the selected pane perpendicular to its surface into a separate
+presentation layer while the viewing camera turns to face it. The archive stays
+visible as a compact prism. `'modal'` presents the selected pane in a native dialog.
+Both reuse the mounted pane by default. Escape dismisses either view. **Back to
+deck** dismisses slide-out selection; the modal close button or backdrop also dismisses it. Closing restores the
+pane to the deck and keyboard focus to browsing.
+
+`'none'` supplies no selection presentation. The controller still records
+`selectedKey` and invokes callbacks, allowing an application to supply its own
+view. In the widget, initial selection calls `onSelect`; repeating activation of
+the selected pane calls optional `onActivate`. The headless controller's
+`select()` semantics remain as documented above.
+
+Use `renderSelection` for a different detail body, such as a higher-resolution
+image. It is called lazily for one selected item and disposed when that selection
+changes or closes. Its content is separately bounded to one additional resource;
+`maxVisible` remains the preview budget. Content renderers never load Three.js or
+XR automatically.
 
 Without a renderer, items are converted to plain text. Strings are never inserted
 as HTML. Content is created lazily and disposed when it leaves the visible window
@@ -161,10 +214,14 @@ The default DOM entry point does not import Three.js or XR.
 import { PrismDeck, Pane, usePrismDeck } from '@prismdeck/react';
 ```
 
-`PrismDeck<T>` accepts the DOM options with `renderPane(item, index): ReactNode`.
+`PrismDeck<T>` accepts the DOM options with `renderPane(item, index): ReactNode`
+and optional `renderSelection(item, index): ReactNode`. This includes `variant`,
+`selectionMode`, `prismLines`, `timelineRails`, and `onActivate`. These props can
+change without remounting the widget.
 It also accepts `style`, `id`, and `onReady(instance)`. `className` and `style`
 apply to the React mount. React content is portaled into the bounded visible
-panes; offscreen content unmounts, so put persistent application state outside a
+panes and, when supplied, the single selection view; offscreen content unmounts,
+so put persistent application state outside a
 pane component when needed.
 
 `Pane` is an optional full-size content wrapper accepting ordinary div attributes.
@@ -175,6 +232,8 @@ returns the current snapshot. It returns `null` when no controller is provided o
 when server-rendering. Get a live controller through `onReady` to drive custom
 React controls or another renderer.
 
+React also exports `PRISMDECK_PRESETS` and the presentation option types:
+`PrismDeckVariant`, `PrismDeckSelectionMode`, and `PrismDeckPresentationOptions`.
 The React entry point does not import Three.js or XR.
 
 ## Optional Three.js renderer
