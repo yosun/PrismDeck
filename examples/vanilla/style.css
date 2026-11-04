@@ -42,9 +42,14 @@ h1 em { font-family: Georgia, "Times New Roman", serif; font-weight: 400; color:
 .variant-switch button strong { font-size: 11px; font-weight: 600; }.variant-switch button span { font-size: 10px; }
 .variant-switch button:hover { background: var(--surface-raised); }.variant-switch button[aria-pressed="true"] { color: var(--text); background: var(--surface-raised); border-color: var(--border-strong); }
 .variant-description { margin: 0; max-width: 370px; color: var(--muted); font-size: 11px; line-height: 1.7; }
+.wallet-note { position: absolute; z-index: 2; top: 43px; left: 30px; margin: 0; color: var(--muted); font: italic 14px/1.5 Georgia, "Times New Roman", serif; pointer-events: none; }
+.selection-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: 12px; background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: 5px; padding: 12px 15px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.secondary-button:hover { background: var(--surface-raised); }
 .feature-controls { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; padding-top: 12px; border-top: 1px solid var(--border); }
 .feature-controls label { display: inline-flex; align-items: center; gap: 7px; font-size: 10px; color: var(--muted); }.feature-controls input { margin: 0; accent-color: var(--text); width: 14px; height: 14px; }
 .feature-controls select { font-size: 10px; background: var(--surface-soft); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 6px 9px; }.selection-mode-label { margin-left: auto; }
+.feature-controls label:has(input:disabled) { opacity: .5; }
 .selection-status { min-height: 34px; display: flex; align-items: center; padding: 7px 30px; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.6; background: var(--surface-soft); }
 .deck-stage { height: 570px; position: relative; background: var(--stage); overflow: hidden; }
 #deck, .react-deck-host { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -67,3 +72,5 @@ footer { display: flex; align-items: center; justify-content: space-between; gap
 @media (max-width: 600px) { .stage-axis { display: none; } }
 
 @media (max-width: 600px) { .header-actions { gap: 14px; }.theme-switch button { font-size: 10px; padding: 7px 8px; } }
+@media (min-width: 601px) and (max-width: 1000px) { .experience-controls { grid-template-columns: 1fr; }.variant-switch { width: max-content; } }
+@media (max-width: 600px) { .variant-switch button { padding: 9px 8px; }.variant-switch button span { font-size: 9px; }.wallet-note { top: 33px; left: 15px; font-size: 12px; }.selection-actions { flex-wrap: wrap; gap: 7px; }.secondary-button { font-size: 9px; gap: 8px; padding: 9px 10px; } }

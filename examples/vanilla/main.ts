@@ -1,5 +1,5 @@
 import { createPrismDeck, PRISMDECK_PRESETS as presets } from '@prismdeck/dom';
-import type { PrismDeckVariant as Variant, PrismDeckSelectionMode as SelectionMode } from '@prismdeck/dom';
+import type { PrismDeckVariant as Variant, PrismDeckSelectionMode as SelectionMode, PrismDeckLayout as Layout } from '@prismdeck/dom';
 import '@prismdeck/dom/style.css';
 import './style.css';
 
@@ -20,11 +20,15 @@ const collectionSize = element<HTMLSelectElement>('collection-size');
 const prismLines = element<HTMLInputElement>('prism-lines');
 const timelineRails = element<HTMLInputElement>('timeline-rails');
 const selectionMode = element<HTMLSelectElement>('selection-mode');
-let variant: Variant = new URL(location.href).searchParams.get('variant') === 'B' ? 'B' : 'A';
+const layout = element<HTMLSelectElement>('layout');
+const requestedVariant = new URL(location.href).searchParams.get('variant');
+let variant: Variant = requestedVariant === 'B' || requestedVariant === 'C' ? requestedVariant : 'A';
 let theme = getDemoTheme();
 applyDemoTheme(theme, false);
 let slides = collection(1000);
-let focused = slides[0];
+// Center the first wallet window so the opening fan shows cards on both sides.
+const initialFocus = variant === 'C' ? 4 : 0;
+let focused = slides[initialFocus];
 
 function updateFocus(slide: Slide, index: number) {
   focused = slide;
@@ -40,7 +44,19 @@ function selectSlide(slide: Slide, index: number) {
 }
 
 function describeSelection() {
-  element('variant-description').textContent = selectionMode.value === 'slide-out'
+  const wallet = layout.value === 'wallet';
+  element('stage-name').textContent = wallet ? 'WALLET WILDCARD' : 'LIVE PRISM';
+  element('wallet-note').hidden = !wallet;
+  element('draw-card').hidden = !wallet;
+  prismLines.disabled = wallet;
+  timelineRails.disabled = wallet;
+  prismLines.title = wallet ? 'Available in Prism layout' : '';
+  timelineRails.title = wallet ? 'Available in Prism layout' : '';
+  element('variant-description').textContent = wallet && selectionMode.value === 'slide-out'
+    ? 'A pocket of possibilities. Draw a card, follow a thought, and return it to its place.'
+    : wallet
+      ? 'A pocket of possibilities. Browse the fan or draw an unexpected card.'
+      : selectionMode.value === 'slide-out'
     ? 'Slide a pane out of the prism. Keep your place in the collection.'
     : selectionMode.value === 'modal'
       ? 'Open a pane in a modal. Return to the deck when you are ready.'
@@ -50,6 +66,8 @@ function describeSelection() {
 function showVariant() {
   element('version-a').setAttribute('aria-pressed', String(variant === 'A'));
   element('version-b').setAttribute('aria-pressed', String(variant === 'B'));
+  element('version-c').setAttribute('aria-pressed', String(variant === 'C'));
+  layout.value = presets[variant].layout;
   prismLines.checked = presets[variant].prismLines;
   timelineRails.checked = presets[variant].timelineRails;
   selectionMode.value = presets[variant].selectionMode;
@@ -71,6 +89,7 @@ const deck = createPrismDeck(element('deck'), {
   },
   onFocus: updateFocus,
   variant,
+  initialFocus,
   theme,
   onSelect: selectSlide,
   onActivate: (slide) => { element('selection-status').textContent = `Activated “${slide.title}”.`; },
@@ -101,6 +120,7 @@ function setCollection(count: number) {
   sequence.max = String(Math.max(0, safeCount - 1));
   sequence.disabled = safeCount === 0;
   element('open-pane').toggleAttribute('disabled', safeCount === 0);
+  element('draw-card').toggleAttribute('disabled', safeCount === 0);
   element('collection-count').textContent = `${safeCount.toLocaleString()} panes`;
   collectionSize.value = String(safeCount);
   if (safeCount) updateFocus(slides[deck.controller.getSnapshot().focus], deck.controller.getSnapshot().focus);
@@ -113,12 +133,26 @@ function setCollection(count: number) {
 
 collectionSize.addEventListener('change', () => setCollection(Number(collectionSize.value)));
 sequence.addEventListener('input', () => deck.controller.focus(Number(sequence.value)));
-element('open-pane').addEventListener('click', () => deck.controller.select());
+element('open-pane').addEventListener('click', () => {
+  deck.controller.select();
+  deck.element.focus({ preventScroll: true });
+});
+element('draw-card').addEventListener('click', () => {
+  const { focus, count } = deck.controller.getSnapshot();
+  if (!count) return;
+  // Explore a different card without shuffling the application's ordered items.
+  const next = count < 2 ? 0 : (focus + 1 + Math.floor(Math.random() * (count - 1))) % count;
+  deck.controller.dismiss();
+  deck.controller.focus(next);
+  deck.controller.select();
+  deck.element.focus({ preventScroll: true });
+  element('selection-status').textContent = `Your wildcard: ${slides[next].title}. A new perspective from pane ${next + 1}.`;
+});
 function setVariant(next: Variant) {
   variant = next;
   deck.controller.dismiss();
   // Clearing overrides makes each version a preset, not a separate widget.
-  deck.update({ variant, selectionMode: undefined, prismLines: undefined, timelineRails: undefined });
+  deck.update({ variant, layout: undefined, selectionMode: undefined, prismLines: undefined, timelineRails: undefined });
   showVariant();
   element('selection-status').textContent = 'Select a pane to bring it into view.';
   const url = new URL(location.href);
@@ -127,6 +161,11 @@ function setVariant(next: Variant) {
 }
 element('version-a').addEventListener('click', () => setVariant('A'));
 element('version-b').addEventListener('click', () => setVariant('B'));
+element('version-c').addEventListener('click', () => setVariant('C'));
+layout.addEventListener('change', () => {
+  deck.update({ layout: layout.value as Layout });
+  describeSelection();
+});
 prismLines.addEventListener('change', () => deck.update({ prismLines: prismLines.checked }));
 timelineRails.addEventListener('change', () => deck.update({ timelineRails: timelineRails.checked }));
 selectionMode.addEventListener('change', () => {
@@ -137,7 +176,7 @@ selectionMode.addEventListener('change', () => {
     : 'Select a pane to bring it into view.';
 });
 showVariant();
-updateFocus(focused, 0);
+updateFocus(focused, initialFocus);
 
 // Explicit opt-in is the boundary: the ordinary demo imports neither Three nor XR.
 let spatial: { dispose(): void; renderer: import('three').WebGLRenderer } | undefined;

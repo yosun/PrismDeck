@@ -69,22 +69,38 @@ a slide editor, or an application route.
 
 The DOM renderer supplies independent presentation options:
 
+- `layout` chooses the `'prism'` volume or `'wallet'` card fan.
 - `selectionMode` chooses `'slide-out'`, `'modal'`, or `'none'`.
-- `prismLines` controls the perspective rectangular prism outline.
+- `prismLines` controls the perspective rectangular prism outline in prism layout.
 - `timelineRails` controls rails along the ordered axis. Their geometry follows
-  the axis; it does not require chronological content.
+  the axis; it does not require chronological content. Rails apply to prism layout.
 
 Version A combines slide-out, prism lines, and rails. Version B combines modal
-selection with both line systems hidden. They are presets, so each explicit
-option overrides its preset independently. React forwards the same options into
-the DOM renderer. Neither preset changes adapters, navigation, content, or XR
-loading.
+selection with both line systems hidden. Version C combines wallet layout and
+slide-out selection with both line systems hidden. They are presets, so each
+explicit option overrides its preset independently. React forwards the same
+options into the DOM renderer. No preset changes adapters, ordering, content,
+theme, or XR loading.
 
 The slide-out keeps WOMDeck's continuous deck-to-pane interaction: selection
 moves the existing pane into a separate presentation layer, translates it along
 the perpendicular axis, and interpolates a separate camera to face it. The
 archive shrinks into the upper-left portion of the view, preserving context.
 It does not replace the pane with a second image or open an overlay dialog.
+
+Wallet layout presents the same bounded content window as cards fanned out of a
+pocket. Its slide-out raises the selected card into the reading layer and keeps
+its slot in the wallet; dismissal returns the card to its place. The collection
+stays ordered. Zoom adjusts the fan's density, and existing keyboard, pointer,
+and touch controls retain their navigation semantics. The pocket is rendered
+with CSS and uses no image resources or renderer dependencies. Prism outlines
+and rails stay hidden while wallet layout is active, with their configuration
+retained for a return to prism layout.
+
+The demo's wildcard action is application code using the shared controller. It
+focuses a different random index and selects that card without shuffling or
+reordering the collection. An application can supply its own discovery strategy;
+the library does not attach meaning or randomness to the ordered axis.
 
 The modal presentation moves the same selected pane into a native dialog.
 Dismissal restores the pane and focus. A caller can provide `renderSelection`

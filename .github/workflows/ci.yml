@@ -23,6 +23,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
       - run: npm run test:variants-browser
+      - run: npm run test:wallet-browser
       - run: npm run test:corners-theme-browser
       - run: npm run test:three-browser
       - run: npm run pack
@@ -30,6 +31,7 @@ jobs:
         with:
           name: packages
           path: .artifacts/
+          include-hidden-files: true
       - run: npm run build:demo
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

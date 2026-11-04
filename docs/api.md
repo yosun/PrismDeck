@@ -125,11 +125,12 @@ import { createPrismDeck, PRISMDECK_PRESETS, resolvePresentationOptions } from '
 | Option | Behavior |
 | --- | --- |
 | `renderPane(item, index)` | Returns a `Node`, plain text string, or `{ element: Node, dispose?: () => void }` |
-| `variant` | `'A'` (default) or `'B'`; selects presentation defaults |
+| `variant` | `'A'` (default), `'B'`, or `'C'`; selects presentation defaults |
+| `layout` | `'prism'` or `'wallet'`; overrides the preset layout |
 | `theme` | `'system'` (default), `'light'` (Day), or `'dark'` (Night); independent of presentation presets |
 | `selectionMode` | `'slide-out'`, `'modal'`, or `'none'`; overrides the preset |
-| `prismLines` | Boolean override for the perspective rectangular prism outline |
-| `timelineRails` | Boolean override for rails along the ordered axis |
+| `prismLines` | Boolean override for the perspective rectangular prism outline; applies to prism layout |
+| `timelineRails` | Boolean override for rails along the ordered axis; applies to prism layout |
 | `transitionDuration` | Approximate slide-out settling time in milliseconds; finite and nonnegative, default `700`; `0` is instant |
 | `renderSelection(item, index)` | Optional detail content, with the same return types as `renderPane`; otherwise the selected pane's content is reused |
 | `onActivate(item, index)` | Optional second activation of the already selected pane |
@@ -141,20 +142,23 @@ import { createPrismDeck, PRISMDECK_PRESETS, resolvePresentationOptions } from '
 
 ### Presentation presets and overrides
 
-| Version | `selectionMode` | `prismLines` | `timelineRails` |
-| --- | --- | --- | --- |
-| `'A'` (default) | `'slide-out'` | `true` | `true` |
-| `'B'` | `'modal'` | `false` | `false` |
+| Version | `layout` | `selectionMode` | `prismLines` | `timelineRails` |
+| --- | --- | --- | --- | --- |
+| `'A'` (default) | `'prism'` | `'slide-out'` | `true` | `true` |
+| `'B'` | `'prism'` | `'modal'` | `false` | `false` |
+| `'C'` | `'wallet'` | `'slide-out'` | `false` | `false` |
 
 `PRISMDECK_PRESETS` exports the immutable preset values.
-`resolvePresentationOptions(options)` returns the resolved variant, mode, line
-options, and transition duration, and validates the variant, mode, and duration.
+`resolvePresentationOptions(options)` returns the resolved variant, layout, mode,
+line options, and transition duration, and validates these presentation options.
 Reduced motion always takes precedence over `transitionDuration`.
 
 Every explicit option takes precedence over its preset independently. Change a
 preset or individual options through `update`; pass `undefined` to clear an
 override and use the current preset again. These options belong to the DOM and
 React presentation layers; the headless controller has no UI version.
+Prism lines and rails are hidden in wallet layout even when their options are
+enabled. Returning to prism layout restores their configured values.
 
 ```ts
 const deck = createPrismDeck(mount, {
@@ -164,6 +168,8 @@ const deck = createPrismDeck(mount, {
 });
 deck.update({ selectionMode: 'slide-out' });
 deck.update({ selectionMode: undefined }); // Return to Version B's modal.
+deck.update({ variant: 'C', layout: undefined }); // Wallet, still with the explicit rails setting.
+deck.update({ layout: 'prism' }); // Prism layout; the rails are visible again.
 ```
 
 `'slide-out'` moves the selected pane perpendicular to its surface into a separate
@@ -172,6 +178,17 @@ visible as a compact prism. `'modal'` presents the selected pane in a native dia
 Both reuse the mounted pane by default. Escape dismisses either view. **Back to
 deck** dismisses slide-out selection; the modal close button or backdrop also dismisses it. Closing restores the
 pane to the deck and keyboard focus to browsing.
+
+Wallet layout arranges the bounded pane window in a fan inside a pocket. Its
+slide-out lifts the original pane into a reading view and retains the pane's slot
+for dismissal. It uses the same focus, selection, and zoom state as prism layout,
+with no new content requests, animation framework, WebGL, or XR dependency.
+The example's **Draw a card** action is application code: it chooses a different
+random index, then calls `controller.focus(index)` and `controller.select()`.
+It never shuffles the items or changes their axis positions.
+When an application button outside the widget opens a slide-out, focus
+`deck.element` with `{ preventScroll: true }` so the widget receives keyboard
+navigation and Escape. Programmatic selection itself preserves application focus.
 
 `'none'` supplies no selection presentation. The controller still records
 `selectedKey` and invokes callbacks, allowing an application to supply its own
@@ -243,7 +260,7 @@ import { PrismDeck, Pane, usePrismDeck } from '@prismdeck/react';
 
 `PrismDeck<T>` accepts the DOM options with `renderPane(item, index): ReactNode`
 and optional `renderSelection(item, index): ReactNode`. This includes `variant`,
-`selectionMode`, `prismLines`, `timelineRails`, `theme`, and `onActivate`. These props can
+`layout`, `selectionMode`, `prismLines`, `timelineRails`, `theme`, and `onActivate`. These props can
 change without remounting the widget.
 It also accepts `style`, `id`, and `onReady(instance)`. `className` and `style`
 apply to the React mount. React content is portaled into the bounded visible
@@ -260,7 +277,7 @@ when server-rendering. Get a live controller through `onReady` to drive custom
 React controls or another renderer.
 
 React also exports `PRISMDECK_PRESETS` and the presentation option types:
-`PrismDeckVariant`, `PrismDeckSelectionMode`, `PrismDeckPresentationOptions`, and
+`PrismDeckVariant`, `PrismDeckLayout`, `PrismDeckSelectionMode`, `PrismDeckPresentationOptions`, and
 `PrismDeckTheme`.
 The React entry point does not import Three.js or XR.
 

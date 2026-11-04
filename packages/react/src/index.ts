@@ -104,13 +104,14 @@ export function PrismDeck<T>(props: PrismDeckProps<T>): ReactElement {
       controls: props.controls,
       theme: props.theme,
       variant: props.variant,
+      layout: props.layout,
       selectionMode: props.selectionMode,
       prismLines: props.prismLines,
       timelineRails: props.timelineRails,
       transitionDuration: props.transitionDuration,
       renderSelection: props.renderSelection ? selectionRenderer.current : undefined,
     });
-  }, [props.items, props.getKey, props.adapter, props.axis, props.maxVisible, props.label, props.controls, props.theme, props.variant, props.selectionMode, props.prismLines, props.timelineRails, props.transitionDuration, !!props.renderSelection]);
+  }, [props.items, props.getKey, props.adapter, props.axis, props.maxVisible, props.label, props.controls, props.theme, props.variant, props.layout, props.selectionMode, props.prismLines, props.timelineRails, props.transitionDuration, !!props.renderSelection]);
 
   return createElement(
     Fragment,
@@ -151,4 +152,4 @@ export function usePrismDeck<T>(controller: PrismDeckInstance<T>['controller'] |
 export type { PrismDeckInstance, PrismDeckOptions } from '@prismdeck/dom';
 
 export { PRISMDECK_PRESETS } from '@prismdeck/dom';
-export type { PrismDeckVariant, PrismDeckSelectionMode, PrismDeckPresentationOptions, PrismDeckTheme } from '@prismdeck/dom';
+export type { PrismDeckVariant, PrismDeckSelectionMode, PrismDeckPresentationOptions, PrismDeckTheme, PrismDeckLayout } from '@prismdeck/dom';

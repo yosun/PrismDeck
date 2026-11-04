@@ -1,6 +1,6 @@
 {
   "name": "@prismdeck/core",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Dependency-free geometry and navigation for ordered 3D panes",
   "type": "module",
   "license": "MIT",

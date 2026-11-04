@@ -1,11 +1,11 @@
-import { createDeckController, getPrismGeometry, visibleIndices } from '@prismdeck/core';
-import type { PrismAdapter, PrismKey, PrismGeometry, PrismCamera } from '@prismdeck/core';
+import { createDeckController, getPrismGeometry, getWalletLayout, visibleIndices } from '@prismdeck/core';
+import type { PrismAdapter, PrismKey, PrismGeometry, PrismCamera, WalletPaneLayout } from '@prismdeck/core';
 
 import { createPrismGuides, drawPrismGuides } from './guides.js';
 import { resolvePresentationOptions, resolveTheme } from './options.js';
-import type { PrismDeckPresentationOptions, PrismDeckTheme } from './options.js';
+import type { PrismDeckPresentationOptions, PrismDeckTheme, PrismDeckLayout } from './options.js';
 export { PRISMDECK_PRESETS, resolvePresentationOptions } from './options.js';
-export type { PrismDeckVariant, PrismDeckSelectionMode, PrismDeckPresentationOptions, PrismDeckTheme } from './options.js';
+export type { PrismDeckVariant, PrismDeckSelectionMode, PrismDeckPresentationOptions, PrismDeckTheme, PrismDeckLayout } from './options.js';
 
 export type PaneContent = Node | string | { element: Node; dispose?: () => void };
 export interface PrismDeckOptions<T> extends PrismDeckPresentationOptions {
@@ -62,7 +62,10 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
   const stage = document.createElement('div');
   stage.className = 'prismdeck-stage';
   const guides = createPrismGuides();
-  viewport.append(guides, stage);
+  const pocket = document.createElement('div'); pocket.className = 'prismdeck-wallet-pocket';
+  pocket.setAttribute('aria-hidden', 'true'); pocket.hidden = true;
+  const pocketLabel = document.createElement('span'); pocketLabel.className = 'prismdeck-wallet-label'; pocket.append(pocketLabel);
+  viewport.append(pocket, guides, stage);
   const status = document.createElement('div');
   status.className = 'prismdeck-status';
   status.setAttribute('aria-live', 'polite');
@@ -100,7 +103,7 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     if (selected && selected.mode === 'slide-out') { event.preventDefault(); event.stopPropagation(); dismiss(); }
   }, true);
   const mounted = new Map<PrismKey, MountedPane>();
-  let selected: { key: PrismKey; index: number; pane: MountedPane; mode: 'slide-out' | 'modal';
+  let selected: { key: PrismKey; index: number; pane: MountedPane; mode: 'slide-out' | 'modal'; layout: PrismDeckLayout; indices: readonly number[];
     amount: number; focus: number; zoom: number; detail?: HTMLElement; disposeDetail?: () => void } | null = null;
   let dialog: HTMLDialogElement | null = null;
   const pointers = new Map<number, {x: number; y: number}>();
@@ -172,7 +175,10 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
       selected.disposeDetail?.(); selected.detail?.remove(); selected.pane.content.hidden = false;
       stage.append(selected.pane.element);
       const restored = getPrismGeometry({count: controller.getSnapshot().count, focus: Math.max(0, selected.focus), zoom: selected.zoom, width, height, positions: controller.getPositions()});
-      placePane(selected.pane, restored, restored.camera, selected.index);
+      if (selected.layout === 'wallet') {
+        const pose = walletLayout(selected.focus, selected.zoom, selected.indices).panes.find(pane => pane.index === selected!.index);
+        if (pose) placeWalletPane(selected.pane, pose);
+      } else placePane(selected.pane, restored, restored.camera, selected.index);
       selected.pane.element.classList.remove('is-presented');
       selected = null;
     }
@@ -184,15 +190,16 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     delete element.dataset.prismdeckSelectedKey;
     if (restoreFocus && !disposed) element.focus({preventScroll: true});
   }
-  function startPresentation(key: PrismKey, index: number, pane: MountedPane) {
+  function startPresentation(key: PrismKey, index: number, pane: MountedPane, indices: readonly number[]) {
     const mode = appearance.selectionMode;
     if (mode === 'none') return;
-    selected = {key, index, pane, mode, amount: mode === 'modal' ? 1 : 0, focus: viewFocus, zoom: viewZoom};
+    selected = {key, index, pane, mode, layout: appearance.layout, indices: [...indices], amount: mode === 'modal' ? 1 : 0, focus: viewFocus, zoom: viewZoom};
     if (options.renderSelection) {
       const detail = document.createElement('div'); detail.className = 'prismdeck-pane-detail';
       selected.disposeDetail = appendContent(detail, options.renderSelection(controller.getItems()[index], index));
       selected.detail = detail; pane.element.append(detail); pane.content.hidden = true;
     }
+    const restorePaneFocus = pane.element.contains(document.activeElement);
     pane.element.classList.add('is-presented');
     if (mode === 'modal') {
       dialog = document.createElement('dialog'); dialog.className = 'prismdeck-dialog';
@@ -207,7 +214,10 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
       dialog.addEventListener('close', () => { if (activeDialog.dataset.prismdeckClosing !== 'true') dismiss(); });
       dialog.addEventListener('click', event => { if (event.target === dialog) dismiss(); });
       dialog.showModal();
-    } else { presentation.hidden = false; selectionStage.append(pane.element); }
+    } else {
+      presentation.hidden = false; selectionStage.append(pane.element);
+      if (restorePaneFocus) element.focus({preventScroll: true});
+    }
   }
   function cameraAtExtraction(geometry: PrismGeometry, index: number, amount: number): PrismCamera {
     const source = geometry.camera;
@@ -226,6 +236,7 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     return {position: source.position.map((value, i) => value + (end[i] - value) * amount) as [number, number, number], direction, right, up, focalLength: source.focalLength};
   }
   function placePane(pane: MountedPane, geometry: PrismGeometry, camera: PrismCamera, index: number, extraction = 0) {
+    pane.element.style.zIndex = ''; delete pane.element.dataset.prismdeckWallet; delete pane.element.dataset.prismdeckWalletPose;
     const at = geometry.positionAt(index); at[2] += geometry.paneWidth * 1.05 * extraction;
     const relative = at.map((value, i) => value - camera.position[i]);
     const x = dot(relative, camera.right), y = -dot(relative, camera.up), depth = dot(relative, camera.direction);
@@ -240,6 +251,28 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     pane.element.dataset.prismdeckWorldRotation = JSON.stringify([0, -Math.PI / 2, 0]);
     pane.element.dataset.prismdeckExtraction = String(extraction);
   }
+  function walletIndices(focus: number, zoom: number) {
+    return visibleIndices(controller.getSnapshot().count, Math.max(0, focus), Math.min(options.maxVisible ?? 40, 9 + Math.round(8 * zoom)), 0);
+  }
+  function walletLayout(focus: number, zoom: number, indices: readonly number[] = walletIndices(focus, zoom)) {
+    return getWalletLayout({width, height, count: controller.getSnapshot().count, focus, zoom, indices});
+  }
+  function placeWalletPane(pane: MountedPane, pose: WalletPaneLayout, extraction = 0) {
+    pane.element.style.width = `${pose.width}px`; pane.element.style.height = `${pose.height}px`;
+    pane.element.style.zIndex = String(pose.zIndex); pane.element.style.visibility = '';
+    pane.element.style.transform = `translate(-50%,-50%) translate3d(${pose.x - width / 2}px,${pose.y - height / 2}px,0) rotateZ(${pose.rotateZ}deg) scale(${pose.scale})`;
+    pane.element.dataset.prismdeckWallet = 'true'; pane.element.dataset.prismdeckWalletPose = JSON.stringify(pose);
+    pane.element.dataset.prismdeckExtraction = String(extraction);
+    delete pane.element.dataset.prismdeckWorldPosition; delete pane.element.dataset.prismdeckWorldRotation;
+  }
+  function readWalletPane(pane: MountedPane, pose: WalletPaneLayout, amount: number) {
+    const readingWidth = Math.max(1, Math.min(width * (width < 600 ? 0.9 : 0.66), Math.max(1, height - 118) * 16 / 9, 720));
+    const readingY = Math.max(readingWidth * 9 / 32 + 16, Math.min(height * 0.41, height - 72 - readingWidth * 9 / 32));
+    const mix = (from: number, to: number) => from + (to - from) * amount;
+    placeWalletPane(pane, {...pose, x: mix(pose.x, width / 2), y: mix(pose.y, readingY),
+      width: mix(pose.width, readingWidth), height: mix(pose.height, readingWidth * 9 / 16),
+      rotateZ: pose.rotateZ * (1 - amount), scale: mix(pose.scale, 1), zIndex: 100}, amount);
+  }
   function render(time: number) {
     frame = 0;
     if (disposed) return;
@@ -250,7 +283,7 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     const delta = Math.min(64, lastTime ? time - lastTime : 16);
     lastTime = time;
     const factor = motion?.matches ? 1 : 1 - Math.exp(-delta / 65);
-    if (Math.abs(state.focus - viewFocus) > Math.max(1, (options.maxVisible ?? 40) / 3)) viewFocus = state.focus;
+    if (Math.abs(state.focus - viewFocus) > Math.max(1, (appearance.layout === 'wallet' ? 9 : options.maxVisible ?? 40) / 3)) viewFocus = state.focus;
     if (!selected) {
       viewFocus += (state.focus - viewFocus) * factor;
       viewZoom += (state.zoom - viewZoom) * factor;
@@ -259,8 +292,20 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     if (Math.abs(viewZoom - state.zoom) < 0.0001) viewZoom = state.zoom;
     const geometry = getPrismGeometry({ count: state.count, focus: Math.max(0, selected?.focus ?? viewFocus), zoom: selected?.zoom ?? viewZoom, width, height, positions: controller.getPositions() });
     const { camera } = geometry;
-    viewport.style.perspective = `${camera.focalLength}px`;
-    const indices = visibleIndices(state.count, Math.max(0, selected?.index ?? viewFocus), options.maxVisible ?? 40, state.zoom);
+    const isWallet = appearance.layout === 'wallet';
+    viewport.style.perspective = isWallet ? 'none' : `${camera.focalLength}px`;
+    const frozen = isWallet && selected ? selected.indices.filter(index => index >= 0 && index < state.count)
+      .sort((a, b) => Math.abs(a - selected!.index) - Math.abs(b - selected!.index))
+      .slice(0, walletIndices(selected.index, selected.zoom).length).sort((a, b) => a - b) : undefined;
+    if (isWallet && selected && frozen) selected.indices = frozen;
+    const indices = isWallet ? [...(frozen ?? walletIndices(viewFocus, viewZoom))] : visibleIndices(state.count, Math.max(0, selected?.index ?? viewFocus), options.maxVisible ?? 40, state.zoom);
+    const wallet = isWallet ? walletLayout(selected?.focus ?? viewFocus, selected?.zoom ?? viewZoom, indices) : null;
+    const walletPoses = new Map(wallet?.panes.map(pane => [pane.index, pane]));
+    pocket.hidden = !isWallet || !state.count;
+    if (wallet) {
+      Object.assign(pocket.style, {left: `${wallet.pocket.x}px`, top: `${wallet.pocket.y}px`, width: `${wallet.pocket.width}px`, height: `${wallet.pocket.height}px`});
+      pocketLabel.textContent = options.axis?.label ?? 'COLLECTION';
+    }
     if (selected && !indices.includes(selected.index) && state.count) { indices.pop(); indices.push(selected.index); }
     const wanted = new Set(indices.map(index => controller.getKey(index)!));
     for (const [key, pane] of mounted) if (!wanted.has(key)) removePane(key, pane);
@@ -271,7 +316,10 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
       if (pane && (pane.item !== item || pane.index !== index)) { removePane(key, pane); pane = undefined; }
       if (!pane) { pane = makePane(index); mounted.set(key, pane); }
       const focused = index === state.focus;
-      if (selected?.key !== key) placePane(pane, geometry, camera, index);
+      if (selected?.key !== key) {
+        const pose = walletPoses.get(index);
+        if (pose) placeWalletPane(pane, pose); else placePane(pane, geometry, camera, index);
+      }
       pane.element.style.setProperty('--prismdeck-distance', String(Math.min(1, Math.abs(index - viewFocus) / 20)));
       pane.element.classList.toggle('is-focused', focused);
       pane.element.classList.toggle('is-selected', key === state.selectedKey);
@@ -284,7 +332,7 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     if (!selected && desiredKey !== null) {
       const index = controller.getItems().findIndex((_, i) => controller.getKey(i) === desiredKey);
       const pane = mounted.get(desiredKey);
-      if (index >= 0 && pane) startPresentation(desiredKey, index, pane);
+      if (index >= 0 && pane) startPresentation(desiredKey, index, pane, indices);
     }
     if (selected) {
       const target = selected.key === desiredKey && selected.mode === appearance.selectionMode ? 1 : 0;
@@ -293,18 +341,26 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
       if (Math.abs(selected.amount - target) < 0.001) selected.amount = target;
       const { pane, index, amount, mode } = selected;
       if (mode === 'slide-out') {
-        const selectionCamera = cameraAtExtraction(geometry, index, amount);
-        selectionViewport.style.perspective = `${selectionCamera.focalLength}px`;
-        selectionViewport.dataset.prismdeckCamera = JSON.stringify(selectionCamera);
         presentation.style.height = `${height}px`;
-        viewport.style.transformOrigin = '0 0';
-        viewport.style.transform = `translate(${16 * amount}px,${22 * amount}px) scale(${1 - 0.7 * amount})`;
-        placePane(pane, geometry, selectionCamera, index, amount);
+        if (isWallet) {
+          const pose = walletPoses.get(index);
+          selectionViewport.style.perspective = 'none';
+          viewport.style.transformOrigin = '50% 50%';
+          viewport.style.transform = `translateY(${height * 0.24 * amount}px) scale(${1 - 0.45 * amount})`;
+          if (pose) readWalletPane(pane, pose, amount);
+        } else {
+          const selectionCamera = cameraAtExtraction(geometry, index, amount);
+          selectionViewport.style.perspective = `${selectionCamera.focalLength}px`;
+          selectionViewport.dataset.prismdeckCamera = JSON.stringify(selectionCamera);
+          viewport.style.transformOrigin = '0 0';
+          viewport.style.transform = `translate(${16 * amount}px,${22 * amount}px) scale(${1 - 0.7 * amount})`;
+          placePane(pane, geometry, selectionCamera, index, amount);
+        }
         back.style.opacity = String(amount); back.disabled = amount < 0.95;
         selectionLabel.textContent = controller.getLabel(index); selectionLabel.style.opacity = String(amount);
       } else {
         pane.element.style.transform = 'none'; pane.element.style.visibility = '';
-        pane.element.style.width = '100%'; pane.element.style.height = '100%';
+        pane.element.style.width = '100%'; pane.element.style.height = '100%'; pane.element.style.zIndex = '';
         pane.element.dataset.prismdeckWorldPosition = JSON.stringify(geometry.positionAt(index));
         pane.element.dataset.prismdeckWorldRotation = JSON.stringify([0, -Math.PI / 2, 0]);
         pane.element.dataset.prismdeckExtraction = '0';
@@ -315,15 +371,18 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
       if (amount !== target) schedule();
       if (amount === 0 && target === 0) { resetPresentation(); schedule(); }
     }
-    drawPrismGuides(guides, geometry, {width, height, prismLines: appearance.prismLines, timelineRails: appearance.timelineRails, indices, focus: state.focus});
+    drawPrismGuides(guides, geometry, {width, height, prismLines: !isWallet && appearance.prismLines, timelineRails: !isWallet && appearance.timelineRails, indices, focus: state.focus});
     element.dataset.prismdeckVariant = appearance.variant;
+    element.dataset.prismdeckLayout = appearance.layout;
+    zoom.setAttribute('aria-label', isWallet ? 'Wallet spread' : 'Prism overview');
+    zoomLabel.firstChild!.textContent = isWallet ? 'Fan' : 'Overview';
     element.dataset.prismdeckSelectionMode = appearance.selectionMode;
-    element.dataset.prismdeckPrismLines = String(appearance.prismLines);
-    element.dataset.prismdeckTimelineRails = String(appearance.timelineRails);
+    element.dataset.prismdeckPrismLines = String(!isWallet && appearance.prismLines);
+    element.dataset.prismdeckTimelineRails = String(!isWallet && appearance.timelineRails);
     const text = state.count ? `${controller.getLabel(state.focus)} · ${state.focus + 1} / ${state.count}` : 'No panes';
     if (status.textContent !== text) status.textContent = text;
     zoom.value = String(state.zoom);
-    zoom.setAttribute('aria-valuetext', `${Math.round(state.zoom * 100)}% overview`);
+    zoom.setAttribute('aria-valuetext', `${Math.round(state.zoom * 100)}% ${isWallet ? 'spread' : 'overview'}`);
     previous.disabled = state.focus <= 0; next.disabled = state.focus >= state.count - 1;
     select.disabled = state.count === 0;
     controls.hidden = options.controls === false;
@@ -430,7 +489,7 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
       // Configure validates before replacing state; rejected updates preserve the old widget.
       controller.configure(next);
       const contentChanged = candidate.renderPane !== options.renderPane;
-      if (contentChanged || candidate.renderSelection !== options.renderSelection || nextAppearance.selectionMode !== appearance.selectionMode) resetPresentation();
+      if (contentChanged || candidate.renderSelection !== options.renderSelection || nextAppearance.selectionMode !== appearance.selectionMode || nextAppearance.layout !== appearance.layout) resetPresentation();
       options = { ...candidate, items: controller.getItems() }; appearance = nextAppearance;
       applyTheme();
       if (contentChanged) clearPanes();

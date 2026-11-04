@@ -1,8 +1,9 @@
 # PrismDeck
 
 A lightweight, open-source 3D navigation component for large collections of
-ordered images and visual content. Browse a volume of parallel panes, focus one,
-and bring it into view with a seamless slide-out or a modal.
+ordered images and visual content. Browse a volume of parallel panes or a wallet
+of fanned cards, focus one, and bring it into view with a seamless slide-out or a
+modal.
 
 Use it for slide decks, photo archives, PDF pages, video frames, version histories,
 medical slices, scientific datasets, or spatial galleries. An axis can mean
@@ -10,8 +11,8 @@ sequence, depth, time, version, or any numerical position.
 
 - **Small default path:** no third-party runtime dependencies in core or DOM.
 - **Bounded rendering:** thousands of items, up to 40 preview panes by default.
-- **Modular presentation:** choose seamless slide-out or modal; switch prism lines
-  and timeline rails independently.
+- **Modular presentation:** choose prism or wallet layout, seamless slide-out or
+  modal, with independent prism lines and timeline rails.
 - **Content stays yours:** render DOM or React content; supply your own actions.
 - **Progressive spatial support:** Three.js and XR are separate, optional imports.
 - **Built for input:** keyboard, pointer, touch, pinch, and zoom controls.
@@ -35,9 +36,12 @@ npm run dev
 
 Open the local Vite URL. The demo generates 1,000 slides locally and can switch to
 10,000 items. No account, image service, API key, or external image host is needed.
-The default is **Version A**. Try the **Version B** switch for modal selection, or
-share a demo URL ending in `?variant=A` or `?variant=B`. The checkboxes and selection
-menu let you mix each option independently. **Day** uses white and neutral grays;
+The default is **Version A**. Try **Version B** for modal selection or
+**[Version C — Wallet wildcard](https://yosun.github.io/PrismDeck/?variant=C)**
+for a fan of cards tucked into a pocket. Draw an unexpected card, read it, and
+return it to its place. Share a demo URL ending in `?variant=A`, `?variant=B`, or
+`?variant=C`. The layout, selection, and guide controls let you mix options
+independently. **Day** uses white and neutral grays;
 **Night** uses dark neutral surfaces. The demo follows your system preference until
 you choose a mode, remembers that choice locally, and supports shareable
 `?theme=light` or `?theme=dark` URLs. Run `npm run dev:react` for the React example.
@@ -73,10 +77,12 @@ The standalone browser bundle needs no build tool or framework:
 ```
 
 For production, download and self-host the browser bundle and stylesheet from a
-[pinned release](https://github.com/yosun/PrismDeck/releases/tag/v0.2.1). GitHub
+[pinned release](https://github.com/yosun/PrismDeck/releases/tag/v0.3.0). GitHub
 Pages follows the current demo build. The bundle contains the DOM widget and core;
-it does not include React, Three.js, or XR. The current standalone build is about
-8.3 KB of gzipped JavaScript plus a 1.7 KB gzipped stylesheet.
+it does not include React, Three.js, or XR. All three presets use
+the same bounded content window; the wallet adds no image resources or renderer
+dependency. The standalone build is approximately 10 KB of gzipped JavaScript
+plus a 2.1 KB gzipped stylesheet.
 
 ## Packages
 
@@ -88,7 +94,7 @@ it does not include React, Three.js, or XR. The current standalone build is abou
 | `@prismdeck/three` | Optional WebGL image renderer | Core; Three.js peer |
 | `@prismdeck/three/xr` | Explicit, lazy XR helpers | Optional Three.js renderer |
 
-The packages are prepared as version **0.2.1**. This repository does not imply
+The packages are prepared as version **0.3.0**. This repository does not imply
 that the names are available from the npm registry. Build local distributable
 tarballs with:
 
@@ -100,14 +106,14 @@ Install the generated tarballs in your application. Install core first, then the
 renderer or binding you use:
 
 ```sh
-npm install /path/to/PrismDeck/.artifacts/prismdeck-core-0.2.1.tgz
-npm install /path/to/PrismDeck/.artifacts/prismdeck-dom-0.2.1.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-core-0.3.0.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-dom-0.3.0.tgz
 # For React applications:
 npm install react react-dom
-npm install /path/to/PrismDeck/.artifacts/prismdeck-react-0.2.1.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-react-0.3.0.tgz
 # For optional Three.js rendering:
 npm install three
-npm install /path/to/PrismDeck/.artifacts/prismdeck-three-0.2.1.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-three-0.3.0.tgz
 ```
 
 ## React
@@ -176,7 +182,7 @@ text string, or `{ element: Node, dispose?: () => void }`. Strings are treated a
 text. Use the cleanup callback for application resources such as media streams,
 object URLs, or custom subscriptions.
 
-## Two versions, independent options
+## Three versions, independent options
 
 **Version A — Seamless slide-out** follows WOMDeck's original DeckStream flow.
 The selected pane slides out along its perpendicular axis while the view turns
@@ -189,14 +195,41 @@ content. The local demo images are 16:9 to fill the default pane exactly.
 **Version B — Modal** opens the selected pane in a modal and hides prism lines
 and timeline rails. Escape, the backdrop, or the close button returns to browsing.
 
-| Preset | Selection | Prism lines | Timeline rails |
-| --- | --- | --- | --- |
-| `variant: 'A'` (default) | `'slide-out'` | `true` | `true` |
-| `variant: 'B'` | `'modal'` | `false` | `false` |
+**Version C — Wallet wildcard** holds the collection in a pocket with a fan of
+cards. Selecting a pane lifts that original card into a reading view, with its
+place retained in the wallet. Return it to continue browsing. It uses the same
+ordered content, input controls, zoom, and bounded rendering budget as the prism.
+The demo's **Draw a card** action explores a different random index without
+reordering or duplicating the collection. Day and Night remain neutral.
+
+```ts
+const deck = createPrismDeck(mount, {
+  items, getKey, renderPane,
+  variant: 'C', // Wallet layout, slide-out selection, no prism guides.
+});
+
+// An application-owned discovery action; collection order stays intact.
+function drawCard() {
+  const { focus, count } = deck.controller.getSnapshot();
+  if (!count) return;
+  const next = count < 2 ? 0 : (focus + 1 + Math.floor(Math.random() * (count - 1))) % count;
+  deck.controller.dismiss();
+  deck.controller.focus(next);
+  deck.controller.select();
+  deck.element.focus({ preventScroll: true }); // Keyboard navigation and Escape stay in the deck.
+}
+```
+
+| Preset | Layout | Selection | Prism lines | Timeline rails |
+| --- | --- | --- | --- | --- |
+| `variant: 'A'` (default) | `'prism'` | `'slide-out'` | `true` | `true` |
+| `variant: 'B'` | `'prism'` | `'modal'` | `false` | `false` |
+| `variant: 'C'` | `'wallet'` | `'slide-out'` | `false` | `false` |
 
 Versions are convenience presets on the same component. Each explicit option
 independently overrides its preset, so a modal can have rails or a slide-out can
-hide the prism outline:
+hide the prism outline. `layout` independently chooses the prism volume or wallet
+fan; prism lines and timeline rails apply only to the prism layout:
 
 ```ts
 const deck = createPrismDeck(mount, {
@@ -207,6 +240,7 @@ const deck = createPrismDeck(mount, {
   prismLines: true,
   timelineRails: true,
   // selectionMode: 'slide-out' | 'modal' | 'none',
+  // layout: 'prism' | 'wallet',
 });
 
 // Change individual options without rebuilding the widget.
@@ -236,11 +270,12 @@ additional content resource and disposes it when selection closes or changes.
 | `onFocus(item, index)` | Called when navigation focuses a pane |
 | `onSelect(item, index)` | Called when a pane is selected |
 | `onActivate(item, index)` | Optional action when the selected pane is activated again |
-| `variant` | `'A'` (default) or `'B'`; selects presentation defaults |
+| `variant` | `'A'` (default), `'B'`, or `'C'`; selects presentation defaults |
+| `layout` | `'prism'` or `'wallet'`; overrides the preset layout |
 | `theme` | `'system'` (default), `'light'` for Day, or `'dark'` for Night; independent of the variant |
 | `selectionMode` | `'slide-out'`, `'modal'`, or `'none'`; overrides the preset |
-| `prismLines` | Show the vanishing-point rectangular prism outline; overrides the preset |
-| `timelineRails` | Show rails along the ordered axis; overrides the preset |
+| `prismLines` | Show the vanishing-point rectangular prism outline in prism layout; overrides the preset |
+| `timelineRails` | Show rails along the ordered axis in prism layout; overrides the preset |
 | `transitionDuration` | Approximate slide-out settling time in milliseconds; defaults to `700`, or `0` for instant |
 | `renderSelection(item, index)` | Optional lazy detail content; defaults to reusing the selected pane |
 | `onDismiss()` | Called when the built-in selection view is dismissed |
