@@ -1,0 +1,36 @@
+{
+  "name": "prismdeck-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "npm run build && npm run typecheck && node --test tests/*.test.mjs",
+    "test:browser": "node tests/browser.mjs",
+    "dev": "vite examples/vanilla --host 127.0.0.1",
+    "dev:react": "vite examples/react --host 127.0.0.1",
+    "build:demo": "vite build examples/vanilla --outDir ../../site --base /PrismDeck/ --emptyOutDir && node scripts/site.mjs",
+    "pack": "npm run build && node scripts/pack.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:three-browser": "node tests/three-browser.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/three": "^0.187.0",
+    "playwright": "^1.56.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "three": "^0.187.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.0",
+    "esbuild": "^0.25.0"
+  }
+}

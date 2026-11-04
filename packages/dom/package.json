@@ -1,0 +1,49 @@
+{
+  "name": "@prismdeck/dom",
+  "version": "0.1.0",
+  "description": "Lightweight virtualized CSS 3D navigation widget",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yosun/PrismDeck.git",
+    "directory": "packages/dom"
+  },
+  "homepage": "https://github.com/yosun/PrismDeck",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./style.css": "./src/style.css",
+    "./xr": {
+      "types": "./dist/xr.d.ts",
+      "import": "./dist/xr.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src/style.css",
+    "LICENSE",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@prismdeck/core": "0.1.0"
+  },
+  "peerDependencies": {
+    "@prismdeck/three": "0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@prismdeck/three": {
+      "optional": true
+    }
+  }
+}

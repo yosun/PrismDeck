@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#101316" />
+    <meta name="description" content="A lightweight 3D navigator for thousands of slides, images, and visual surfaces. No framework or XR required." />
+    <title>PrismDeck — Find your next perspective</title>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="site-header">
+        <a class="brand" href="./" aria-label="PrismDeck home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>PrismDeck<span class="version">0.1</span></a>
+        <nav aria-label="Project links"><a href="https://github.com/yosun/PrismDeck#readme">Documentation <span aria-hidden="true">↗</span></a><a href="https://github.com/yosun/PrismDeck">GitHub <span aria-hidden="true">↗</span></a></nav>
+      </header>
+
+      <main>
+        <section class="intro" aria-labelledby="intro-title">
+          <div><p class="eyebrow"><span></span> A NEW DIMENSION OF BROWSING</p><h1 id="intro-title">Find your next<br /><em>perspective.</em></h1></div>
+          <div class="intro-aside"><p>A thousand slides. One clear volume.<br />Move through the sequence. Make space for the details.</p><div class="feature-tags"><span>Framework free</span><span>Bounded rendering</span><span>Open source</span></div></div>
+        </section>
+
+        <section class="gallery" aria-labelledby="collection-title">
+          <div class="gallery-topbar"><div><p class="eyebrow">THE COLLECTION</p><h2 id="collection-title">Studies in perspective <span id="collection-count">1,000 panes</span></h2></div><label class="collection-picker">Collection size <select id="collection-size"><option value="100">100 panes</option><option value="1000" selected>1,000 panes</option><option value="10000">10,000 panes</option></select></label></div>
+          <div class="deck-stage"><div class="stage-label"><span class="live-dot"></span> LIVE PRISM <span class="stage-hint">Drag · Scroll · Pinch</span></div><div id="deck" aria-label="Interactive slide collection"></div><span class="stage-axis" aria-hidden="true">SEQUENCE →</span></div>
+          <div class="selection-bar"><div class="focus-info"><span class="focus-number" id="focus-number">001</span><div><p class="eyebrow" id="focus-kicker">FORM &amp; SPACE</p><h3 id="focus-title">Contours of tomorrow</h3></div></div><button class="primary-button" id="open-pane">Open pane <span aria-hidden="true">↗</span></button></div>
+          <div class="sequence-control"><span id="sequence-position">1 / 1,000</span><input id="sequence" type="range" min="0" max="999" value="0" aria-label="Jump to a pane" /><span>ORDERED, NOT OVERWHELMING</span></div>
+        </section>
+
+        <section class="below-gallery" aria-label="How it works"><div class="input-help"><span class="keycap">←</span><span class="keycap">→</span><span>Navigate</span><span class="keycap">+ / −</span><span>Density</span><span class="keycap">↵</span><span>Open</span></div><p id="render-status">40 mounted panes maximum · Zero XR loaded</p></section>
+        <section class="library-note"><div><p class="eyebrow">YOUR CONTENT. A NEW PERSPECTIVE.</p><p>Slides, photographs, pages, slices, versions.<br />One small widget. Any ordered collection.</p></div><div class="spatial-option"><button class="text-button" id="spatial-button">Try optional spatial / XR view <span aria-hidden="true">↗</span></button><p id="xr-status">Three.js and XR stay unloaded until you opt in.</p></div></section>
+      </main>
+      <footer><span>PrismDeck <span class="footer-dot">·</span> MIT licensed</span><span>Built to give your content room.</span></footer>
+    </div>
+
+    <dialog id="pane-dialog" class="pane-dialog"><div class="dialog-heading"><div><p class="eyebrow" id="dialog-kicker">SELECTED PANE</p><h2 id="dialog-title">Pane details</h2></div><button class="icon-button" id="close-pane" aria-label="Close pane">×</button></div><img id="dialog-image" alt="" /><p class="dialog-note">This detail view belongs to the example application. PrismDeck supplies the selection event.</p><div class="dialog-actions"><button class="text-button" id="previous-pane">← Previous</button><span id="dialog-position"></span><button class="text-button" id="next-pane">Next →</button></div></dialog>
+    <dialog id="spatial-dialog" class="spatial-dialog"><div class="dialog-heading"><div><p class="eyebrow">OPTIONAL RENDERER</p><h2>Same collection. Spatial view.</h2></div><button class="icon-button" id="close-spatial" aria-label="Close spatial view">×</button></div><div id="spatial-stage"></div><div class="spatial-toolbar"><p id="spatial-message" role="status">Loading the optional renderer…</p><button class="primary-button" id="enter-xr" hidden>Enter XR</button></div></dialog>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
