@@ -3,7 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#101316" />
+    <meta name="theme-color" content="#ffffff" />
+    <script>
+      (() => {
+        let theme = new URL(location.href).searchParams.get('theme');
+        if (theme !== 'light' && theme !== 'dark') {
+          try { theme = localStorage.getItem('prismdeck-theme'); } catch {}
+        }
+        if (theme !== 'light' && theme !== 'dark') theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+        document.querySelector('meta[name="theme-color"]').content = theme === 'light' ? '#ffffff' : '#101010';
+      })();
+    </script>
     <title>PrismDeck — React example</title>
   </head>
   <body>

@@ -126,6 +126,7 @@ import { createPrismDeck, PRISMDECK_PRESETS, resolvePresentationOptions } from '
 | --- | --- |
 | `renderPane(item, index)` | Returns a `Node`, plain text string, or `{ element: Node, dispose?: () => void }` |
 | `variant` | `'A'` (default) or `'B'`; selects presentation defaults |
+| `theme` | `'system'` (default), `'light'` (Day), or `'dark'` (Night); independent of presentation presets |
 | `selectionMode` | `'slide-out'`, `'modal'`, or `'none'`; overrides the preset |
 | `prismLines` | Boolean override for the perspective rectangular prism outline |
 | `timelineRails` | Boolean override for rails along the ordered axis |
@@ -201,8 +202,34 @@ Invalid key/position updates preserve the previous widget. A pane's application
 cleanup should release resources it owns; the library does not revoke your
 object URLs or cancel your subscriptions automatically.
 
-Theme variables are `--prismdeck-accent`, `--prismdeck-background`, and
-`--prismdeck-color`. Size the mount with CSS. The widget supports reduced motion,
+### Theme
+
+`theme: 'system'` follows the operating system's color preference, including live
+changes. `'light'` gives the widget white Day surfaces; `'dark'` gives it dark
+Night surfaces. All default colors are neutral. Use `deck.update({ theme: 'dark' })`
+to change the mode without rebuilding the widget. The resolved mode is exposed as
+`data-prismdeck-theme="light"` or `"dark"` on its root. The widget never stores a
+preference or changes the application page's theme.
+
+Optional CSS variables override individual colors:
+
+| Variable | Controls |
+| --- | --- |
+| `--prismdeck-background` | Main background and selection surfaces |
+| `--prismdeck-color` | Text |
+| `--prismdeck-accent` | Focus and selection outlines, input controls |
+| `--prismdeck-border` | Pane, control, and selection borders |
+| `--prismdeck-pane-background` | Empty pane surface |
+| `--prismdeck-button-background` | Navigation buttons |
+| `--prismdeck-guide-color` | Perspective boundary lines |
+| `--prismdeck-rail-color` | Axis rails and ticks |
+
+Use opaque background colors when overriding `--prismdeck-background`, because
+selection dialogs use that surface too. Custom pane content retains its own
+colors. The demo's Day/Night control and persistence are application code in
+[the shared theme helper](../examples/shared/theme.ts).
+
+Size the mount with CSS. The widget supports reduced motion,
 arrow keys, Home/End, PageUp/PageDown, plus/minus, Enter, Escape, pointer drag,
 wheel density changes, and touch pinch.
 
@@ -216,7 +243,7 @@ import { PrismDeck, Pane, usePrismDeck } from '@prismdeck/react';
 
 `PrismDeck<T>` accepts the DOM options with `renderPane(item, index): ReactNode`
 and optional `renderSelection(item, index): ReactNode`. This includes `variant`,
-`selectionMode`, `prismLines`, `timelineRails`, and `onActivate`. These props can
+`selectionMode`, `prismLines`, `timelineRails`, `theme`, and `onActivate`. These props can
 change without remounting the widget.
 It also accepts `style`, `id`, and `onReady(instance)`. `className` and `style`
 apply to the React mount. React content is portaled into the bounded visible
@@ -233,7 +260,8 @@ when server-rendering. Get a live controller through `onReady` to drive custom
 React controls or another renderer.
 
 React also exports `PRISMDECK_PRESETS` and the presentation option types:
-`PrismDeckVariant`, `PrismDeckSelectionMode`, and `PrismDeckPresentationOptions`.
+`PrismDeckVariant`, `PrismDeckSelectionMode`, `PrismDeckPresentationOptions`, and
+`PrismDeckTheme`.
 The React entry point does not import Three.js or XR.
 
 ## Optional Three.js renderer

@@ -24,3 +24,10 @@ export function resolvePresentationOptions(options: PrismDeckPresentationOptions
   return { variant, selectionMode, prismLines: options.prismLines ?? preset.prismLines,
     timelineRails: options.timelineRails ?? preset.timelineRails, transitionDuration };
 }
+
+export type PrismDeckTheme = 'light' | 'dark' | 'system';
+/** Resolve a neutral color scheme without user-agent detection or renderer dependencies. */
+export function resolveTheme(theme: PrismDeckTheme = 'system', prefersDark = false): 'light' | 'dark' {
+  if (!['light', 'dark', 'system'].includes(theme)) throw new RangeError('PrismDeck theme must be light, dark, or system.');
+  return theme === 'system' ? prefersDark ? 'dark' : 'light' : theme;
+}

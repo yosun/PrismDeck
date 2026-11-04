@@ -75,16 +75,20 @@ export function drawPrismGuides(svg: SVGSVGElement, geometry: PrismGeometry, opt
   svg.replaceChildren();
   if (focus < 0 || !indices.length || (!prismLines && !timelineRails)) return;
   const document = svg.ownerDocument;
-  const firstX = -60, lastX = geometry.length + 60;
-  const bottom = -24, top = geometry.paneHeight + 24;
-  const halfWidth = (geometry.paneWidth + 80) / 2;
+  // The four receding edges are the pane corners' paths, not a padded cage.
+  // A singleton (or a fully coincident numeric axis) needs a tiny finite extent
+  // to keep its longitudinal edges visible. Every nonzero axis ends at its panes.
+  const firstX = geometry.length === 0 ? -1 : 0;
+  const lastX = geometry.length === 0 ? 1 : geometry.length;
+  const bottom = 0, top = geometry.paneHeight;
+  const halfWidth = geometry.paneWidth / 2;
   const group = (name: 'prism' | 'rails') => {
     const node = document.createElementNS(SVG_NS, 'g');
     node.setAttribute('data-prismdeck-guide', name);
     svg.append(node);
     return node;
   };
-  const line = (parent: SVGGElement, from: Point, to: Point, className: string, index?: number) => {
+  const line = (parent: SVGGElement, from: Point, to: Point, className: string, index?: number, edge?: 'axis' | 'end') => {
     const points = projectPrismSegment(from, to, geometry.camera, width, height);
     if (!points) return;
     const node = document.createElementNS(SVG_NS, 'line');
@@ -95,22 +99,24 @@ export function drawPrismGuides(svg: SVGSVGElement, geometry: PrismGeometry, opt
     node.setAttribute('y2', String(points[1].y));
     node.setAttribute('vector-effect', 'non-scaling-stroke');
     if (index !== undefined) node.setAttribute('data-prismdeck-index', String(index));
+    if (edge !== undefined) node.setAttribute('data-prismdeck-edge', edge);
     parent.append(node);
   };
   if (prismLines) {
     const prism = group('prism');
     // Four receding edges and the four sides of each finite end face: twelve edges.
     for (const y of [bottom, top]) for (const z of [-halfWidth, halfWidth]) {
-      line(prism, [firstX, y, z], [lastX, y, z], 'prismdeck-guide-line');
+      line(prism, [firstX, y, z], [lastX, y, z], 'prismdeck-guide-line', undefined, 'axis');
     }
     for (const x of [firstX, lastX]) {
-      for (const y of [bottom, top]) line(prism, [x, y, -halfWidth], [x, y, halfWidth], 'prismdeck-guide-line');
-      for (const z of [-halfWidth, halfWidth]) line(prism, [x, bottom, z], [x, top, z], 'prismdeck-guide-line');
+      for (const y of [bottom, top]) line(prism, [x, y, -halfWidth], [x, y, halfWidth], 'prismdeck-guide-line', undefined, 'end');
+      for (const z of [-halfWidth, halfWidth]) line(prism, [x, bottom, z], [x, top, z], 'prismdeck-guide-line', undefined, 'end');
     }
   }
   if (timelineRails) {
     const rails = group('rails');
-    const floor = bottom - 8, railWidth = halfWidth + 14;
+    // Rails are separate furniture, with room below and outside the pane faces.
+    const floor = bottom - 32, railWidth = halfWidth + 54;
     for (const z of [-railWidth, railWidth]) line(rails, [firstX, floor, z], [lastX, floor, z], 'prismdeck-guide-rail');
     const ticks = new Set(indices.filter((index) => Number.isFinite(index) && index >= 0));
     ticks.delete(focus);

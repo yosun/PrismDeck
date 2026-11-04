@@ -25,6 +25,13 @@ const groupFor = (svg, name) => svg.children.find((node) => node.getAttribute('d
 const draw = (svg, options = {}, geometry = geometryFor()) => drawPrismGuides(svg, geometry, {
   ...viewport, prismLines: true, timelineRails: true, indices: visibleIndices(10000, 5000, 40, 1), focus: 5000, ...options,
 });
+const endpoints = (line) => [
+  { x: Number(line.getAttribute('x1')), y: Number(line.getAttribute('y1')) },
+  { x: Number(line.getAttribute('x2')), y: Number(line.getAttribute('y2')) },
+];
+const distanceToLine = (point, from, to) => Math.abs(
+  (to.x - from.x) * (from.y - point.y) - (from.x - point.x) * (to.y - from.y),
+) / Math.hypot(to.x - from.x, to.y - from.y);
 
 test('world projection matches pane perspective and the ordered axis converges to its vanishing point', () => {
   const geometry = geometryFor();
@@ -75,6 +82,49 @@ test('the finite prism has twelve edges and independently switchable rails', () 
   assert.equal(svg.children.length, 0);
 });
 
+test('all pane corners meet the four receding boundaries at every density and numerical position', () => {
+  const cases = [
+    { count: 31, focus: 15 },
+    { count: 7, focus: 3, positions: [-35, -30, -30, -12, 4, 19, 100] },
+    { count: 12, focus: 9, paneWidth: 420, paneHeight: 280 },
+  ];
+  for (const options of cases) for (const zoom of [0, 0.2, 0.6, 1]) {
+    const geometry = geometryFor({ ...options, zoom });
+    const svg = makeSVG();
+    const indices = Array.from({ length: options.count }, (_, index) => index);
+    draw(svg, { indices, focus: options.focus, timelineRails: false }, geometry);
+    const boundaries = groupFor(svg, 'prism').children.filter((line) => line.getAttribute('data-prismdeck-edge') === 'axis');
+    assert.equal(boundaries.length, 4);
+    let boundaryIndex = 0;
+    for (const y of [0, geometry.paneHeight]) for (const z of [-geometry.paneWidth / 2, geometry.paneWidth / 2]) {
+      const line = boundaries[boundaryIndex++];
+      const [from, to] = endpoints(line);
+      const expected = projectPrismSegment([0, y, z], [geometry.length, y, z], geometry.camera, viewport.width, viewport.height);
+      near(from.x, expected[0].x); near(from.y, expected[0].y);
+      near(to.x, expected[1].x); near(to.y, expected[1].y);
+      for (const index of indices) {
+        const [x] = geometry.positionAt(index);
+        const corner = projectPrismPoint([x, y, z], geometry.camera, viewport.width, viewport.height);
+        if (!corner) continue;
+        assert.ok(distanceToLine(corner, from, to) <= 1e-6,
+          `Pane ${index}, zoom ${zoom}: corner (${y}, ${z}) must lie on its prism boundary`);
+      }
+    }
+    // End faces use the same unpadded four corners as the first and last panes.
+    const ends = groupFor(svg, 'prism').children.filter((line) => line.getAttribute('data-prismdeck-edge') === 'end');
+    const expectedEnds = [];
+    for (const x of [0, geometry.length]) {
+      for (const y of [0, geometry.paneHeight]) expectedEnds.push([[x, y, -geometry.paneWidth / 2], [x, y, geometry.paneWidth / 2]]);
+      for (const z of [-geometry.paneWidth / 2, geometry.paneWidth / 2]) expectedEnds.push([[x, 0, z], [x, geometry.paneHeight, z]]);
+    }
+    const visibleEnds = expectedEnds.map(([from, to]) => projectPrismSegment(from, to, geometry.camera, viewport.width, viewport.height)).filter(Boolean);
+    assert.equal(ends.length, visibleEnds.length);
+    ends.forEach((line, index) => endpoints(line).forEach((point, end) => {
+      near(point.x, visibleEnds[index][end].x); near(point.y, visibleEnds[index][end].y);
+    }));
+  }
+});
+
 test('rail markers stay bounded by rendered indices and include one focused marker', () => {
   const svg = makeSVG();
   const indices = visibleIndices(10000, 5000, 40, 1);
@@ -98,6 +148,12 @@ test('empty decks clear previous geometry, and singleton collections retain a fi
   draw(svg, { focus: 0, indices: [0] }, geometryFor({ count: 1, focus: 0 }));
   assert.equal(groupFor(svg, 'prism').children.length, 12);
   assert.equal(groupFor(svg, 'rails').children.length, 3);
+  const singleton = geometryFor({ count: 1, focus: 0 });
+  const boundary = endpoints(groupFor(svg, 'prism').children[0]);
+  const expected = projectPrismSegment([-1, 0, -singleton.paneWidth / 2], [1, 0, -singleton.paneWidth / 2], singleton.camera, viewport.width, viewport.height);
+  boundary.forEach((point, end) => {
+    near(point.x, expected[end].x); near(point.y, expected[end].y);
+  });
   draw(svg, { indices: [] });
   assert.equal(svg.children.length, 0);
 });

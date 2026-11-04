@@ -37,8 +37,10 @@ Open the local Vite URL. The demo generates 1,000 slides locally and can switch 
 10,000 items. No account, image service, API key, or external image host is needed.
 The default is **Version A**. Try the **Version B** switch for modal selection, or
 share a demo URL ending in `?variant=A` or `?variant=B`. The checkboxes and selection
-menu let you mix each option independently. Run `npm run dev:react` for the React
-example.
+menu let you mix each option independently. **Day** uses white and neutral grays;
+**Night** uses dark neutral surfaces. The demo follows your system preference until
+you choose a mode, remembers that choice locally, and supports shareable
+`?theme=light` or `?theme=dark` URLs. Run `npm run dev:react` for the React example.
 
 ## Drop into any page
 
@@ -63,6 +65,7 @@ The standalone browser bundle needs no build tool or framework:
       return image;
     },
     variant: 'A', // Seamless slide-out, prism lines, and timeline rails.
+    theme: 'system', // Neutral light/dark surfaces; follows the OS by default.
     onSelect: (item) => console.log('Selected', item.id),
     onActivate: (item) => console.log('Activate', item.id),
   });
@@ -70,10 +73,10 @@ The standalone browser bundle needs no build tool or framework:
 ```
 
 For production, download and self-host the browser bundle and stylesheet from a
-[pinned release](https://github.com/yosun/PrismDeck/releases/tag/v0.2.0). GitHub
+[pinned release](https://github.com/yosun/PrismDeck/releases/tag/v0.2.1). GitHub
 Pages follows the current demo build. The bundle contains the DOM widget and core;
 it does not include React, Three.js, or XR. The current standalone build is about
-8 KB of gzipped JavaScript plus a 1.7 KB gzipped stylesheet.
+8.3 KB of gzipped JavaScript plus a 1.7 KB gzipped stylesheet.
 
 ## Packages
 
@@ -85,7 +88,7 @@ it does not include React, Three.js, or XR. The current standalone build is abou
 | `@prismdeck/three` | Optional WebGL image renderer | Core; Three.js peer |
 | `@prismdeck/three/xr` | Explicit, lazy XR helpers | Optional Three.js renderer |
 
-The packages are prepared as version **0.2.0**. This repository does not imply
+The packages are prepared as version **0.2.1**. This repository does not imply
 that the names are available from the npm registry. Build local distributable
 tarballs with:
 
@@ -97,14 +100,14 @@ Install the generated tarballs in your application. Install core first, then the
 renderer or binding you use:
 
 ```sh
-npm install /path/to/PrismDeck/.artifacts/prismdeck-core-0.2.0.tgz
-npm install /path/to/PrismDeck/.artifacts/prismdeck-dom-0.2.0.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-core-0.2.1.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-dom-0.2.1.tgz
 # For React applications:
 npm install react react-dom
-npm install /path/to/PrismDeck/.artifacts/prismdeck-react-0.2.0.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-react-0.2.1.tgz
 # For optional Three.js rendering:
 npm install three
-npm install /path/to/PrismDeck/.artifacts/prismdeck-three-0.2.0.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-three-0.2.1.tgz
 ```
 
 ## React
@@ -120,6 +123,7 @@ export function SlideBrowser({ items, handleFocus, handleSelect, openEditor }) {
       getKey={(item) => item.id}
       renderPane={(item) => <MyContent item={item} />}
       variant="A"
+      theme="system"
       onFocus={handleFocus}
       onSelect={handleSelect}
       onActivate={openEditor}
@@ -178,7 +182,9 @@ object URLs, or custom subscriptions.
 The selected pane slides out along its perpendicular axis while the view turns
 to face it. The collection stays in view as a compact prism, with vanishing-point
 rectangular prism lines and timeline rails. The pane itself becomes the detail
-view; no modal interrupts the transition.
+view; no modal interrupts the transition. Each pane's four corners meet the prism
+boundaries at that pane's depth; the guide volume uses the same geometry as the
+content. The local demo images are 16:9 to fill the default pane exactly.
 
 **Version B — Modal** opens the selected pane in a modal and hides prism lines
 and timeline rails. Escape, the backdrop, or the close button returns to browsing.
@@ -231,6 +237,7 @@ additional content resource and disposes it when selection closes or changes.
 | `onSelect(item, index)` | Called when a pane is selected |
 | `onActivate(item, index)` | Optional action when the selected pane is activated again |
 | `variant` | `'A'` (default) or `'B'`; selects presentation defaults |
+| `theme` | `'system'` (default), `'light'` for Day, or `'dark'` for Night; independent of the variant |
 | `selectionMode` | `'slide-out'`, `'modal'`, or `'none'`; overrides the preset |
 | `prismLines` | Show the vanishing-point rectangular prism outline; overrides the preset |
 | `timelineRails` | Show rails along the ordered axis; overrides the preset |
@@ -283,6 +290,24 @@ controller.dismiss();
 
 unsubscribe();
 ```
+
+## Neutral day and night modes
+
+The DOM widget and React component accept `theme: 'light' | 'dark' | 'system'`.
+The default is `'system'`, which follows changes to the operating system's color
+preference. Choose `'light'` for white Day mode or `'dark'` for dark Night mode.
+Theme and presentation options are independent:
+
+```ts
+deck.update({ theme: 'light' });
+// React: <PrismDeck items={items} renderPane={renderPane} theme="dark" />
+```
+
+The widget does not store a preference or change your page theme. Applications
+own their preference controls and persistence. Neutral widget surfaces, pane
+outlines, guide lines, controls, and selection views adapt together. Custom pane
+content keeps its own colors. See the [theme helper](./examples/shared/theme.ts)
+for the demo's optional URL and local storage behavior.
 
 ## Headless geometry
 

@@ -2,14 +2,16 @@ import { createDeckController, getPrismGeometry, visibleIndices } from '@prismde
 import type { PrismAdapter, PrismKey, PrismGeometry, PrismCamera } from '@prismdeck/core';
 
 import { createPrismGuides, drawPrismGuides } from './guides.js';
-import { resolvePresentationOptions } from './options.js';
-import type { PrismDeckPresentationOptions } from './options.js';
+import { resolvePresentationOptions, resolveTheme } from './options.js';
+import type { PrismDeckPresentationOptions, PrismDeckTheme } from './options.js';
 export { PRISMDECK_PRESETS, resolvePresentationOptions } from './options.js';
-export type { PrismDeckVariant, PrismDeckSelectionMode, PrismDeckPresentationOptions } from './options.js';
+export type { PrismDeckVariant, PrismDeckSelectionMode, PrismDeckPresentationOptions, PrismDeckTheme } from './options.js';
 
 export type PaneContent = Node | string | { element: Node; dispose?: () => void };
 export interface PrismDeckOptions<T> extends PrismDeckPresentationOptions {
   items: readonly T[];
+  /** Neutral day/night scheme; system follows the operating system live. */
+  theme?: PrismDeckTheme;
   getKey?: (item: T) => PrismKey;
   adapter?: PrismAdapter<T>;
   renderPane?: (item: T, index: number) => PaneContent;
@@ -43,9 +45,14 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
   let options = { ...initial };
   let disposed = false;
   let appearance = resolvePresentationOptions(options);
+  const colorPreference = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
+  resolveTheme(options.theme, colorPreference?.matches);
   const controller = createDeckController<T>(options);
   const element = document.createElement('section');
   element.className = `prismdeck ${options.className ?? ''}`;
+  const applyTheme = () => { element.dataset.prismdeckTheme = resolveTheme(options.theme, colorPreference?.matches); };
+  applyTheme();
+  colorPreference?.addEventListener('change', applyTheme);
   element.tabIndex = 0;
   element.setAttribute('role', 'region');
   element.setAttribute('aria-roledescription', '3D pane browser');
@@ -419,11 +426,13 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
       if (disposed) return;
       const candidate = { ...options, ...next };
       const nextAppearance = resolvePresentationOptions(candidate);
+      resolveTheme(candidate.theme, colorPreference?.matches);
       // Configure validates before replacing state; rejected updates preserve the old widget.
       controller.configure(next);
       const contentChanged = candidate.renderPane !== options.renderPane;
       if (contentChanged || candidate.renderSelection !== options.renderSelection || nextAppearance.selectionMode !== appearance.selectionMode) resetPresentation();
       options = { ...candidate, items: controller.getItems() }; appearance = nextAppearance;
+      applyTheme();
       if (contentChanged) clearPanes();
       element.className = `prismdeck ${options.className ?? ''}`;
       element.setAttribute('aria-label', options.label ?? 'PrismDeck');
@@ -432,7 +441,7 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     dispose() {
       if (disposed) return;
       disposed = true; cancelAnimationFrame(frame); clearTimeout(suppressTimer);
-      observer.disconnect(); unsubscribe(); controller.dispose(); resetPresentation(); clearPanes();
+      observer.disconnect(); colorPreference?.removeEventListener('change', applyTheme); unsubscribe(); controller.dispose(); resetPresentation(); clearPanes();
       window.removeEventListener('pointerup', onUp); window.removeEventListener('pointercancel', onUp);
       pointers.clear(); element.remove();
     },

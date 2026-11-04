@@ -98,6 +98,27 @@ editor, inspect a scan, or compare versions. Setting `selectionMode: 'none'`
 leaves the entire detail interface to the application. PrismDeck does not choose
 routes, application actions, or network requests.
 
+## Geometry and neutral themes
+
+Pane content and perspective guides use the same volume geometry. The guide
+cross section at any pane's axis position is that pane's full width and height,
+so its four corners meet the four prism boundaries. Images retain their intrinsic
+aspect ratio inside that surface. Use images matching the pane's aspect ratio
+(the default is 16:9) when the image itself should meet all four boundaries; the
+shared demo samples use 1600 × 900 SVGs.
+
+Color mode is independent of navigation and presentation. The DOM renderer owns
+`theme: 'light' | 'dark' | 'system'`, and React forwards that option. `'system'` is
+the default and observes operating system changes. Both explicit modes use
+neutral white, gray, and dark colors for surfaces, controls, focus, and guides.
+Applications can override documented CSS variables and supply any pane content.
+Core and optional spatial modules do not acquire a theme dependency.
+
+The component stores no preference and changes no page-level styles. Demo-only
+code shares Day/Night controls, optional local persistence, URL preferences, and
+system-theme observation between the vanilla and React examples. A small inline
+initializer applies the same preference before the first page paint.
+
 ## Accessibility
 
 The DOM renderer provides keyboard navigation, an accessible label, visible focus,

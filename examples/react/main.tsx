@@ -1,28 +1,18 @@
 import * as React from 'react';
-import { StrictMode, useCallback, useMemo, useRef, useState } from 'react';
+import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PrismDeck, PRISMDECK_PRESETS as presets } from '@prismdeck/react';
 import type { PrismDeckInstance, PrismDeckVariant as Variant, PrismDeckSelectionMode as SelectionMode } from '@prismdeck/react';
 import '@prismdeck/dom/style.css';
 import '../vanilla/style.css';
 
-type Slide = { id: string; index: number; title: string; color: string; accent: string };
-const subjects = [
-  ['Contours of tomorrow', '#d7e8ae', '#325e54'],
-  ['A quieter frequency', '#e9c6a0', '#795153'],
-  ['Between the blue', '#bdd9f0', '#375676'],
-  ['The shape of motion', '#e9d0e6', '#654b78'],
-  ['An open horizon', '#efdfa5', '#5c6b4b'],
-];
-
-/** Local SVG thumbnails keep the example portable and independent of APIs. */
-function thumbnail(slide: Slide): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900"><rect width="1440" height="900" fill="${slide.color}"/><circle cx="1080" cy="310" r="185" fill="${slide.accent}" opacity=".15"/><path d="M0 660Q300 280 720 610T1440 470V900H0Z" fill="${slide.accent}" opacity=".65"/><path d="M0 800Q450 420 960 750T1440 660V900H0Z" fill="${slide.accent}"/><g fill="${slide.accent}" font-family="Arial,Helvetica,sans-serif"><text x="76" y="90" font-size="19" letter-spacing="5">STUDIES IN PERSPECTIVE</text><text x="76" y="215" font-size="68">${slide.title}</text><text x="78" y="270" font-size="20" letter-spacing="3">FORM / COLOR / POSSIBILITY</text></g><text x="76" y="836" fill="${slide.color}" font-family="Arial,Helvetica,sans-serif" font-size="21" letter-spacing="2">PRISMDECK / ${String(slide.index + 1).padStart(3, '0')}</text></svg>`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-}
+import { collection, imageSource } from '../shared/slides';
+import type { Slide } from '../shared/slides';
+import { applyDemoTheme, getDemoTheme, watchSystemTheme } from '../shared/theme';
+import type { DemoTheme } from '../shared/theme';
 
 function MyContent({ item }: { item: Slide }) {
-  return <img src={thumbnail(item)} alt={`${item.title}, synthetic study ${item.index + 1}`} draggable={false} decoding="async" />;
+  return <img src={imageSource(item)} alt={`${item.title}, synthetic study ${item.index + 1}`} draggable={false} decoding="async" />;
 }
 
 const getKey = (item: Slide) => item.id;
@@ -31,10 +21,16 @@ const renderPane = (item: Slide) => <MyContent item={item} />;
 
 function App() {
   const [count, setCount] = useState(1000);
-  const items = useMemo<Slide[]>(() => Array.from({ length: count }, (_, index) => {
-    const [title, color, accent] = subjects[index % subjects.length];
-    return { id: `slide-${index}`, index, title, color, accent };
-  }), [count]);
+  const items = useMemo(() => collection(count), [count]);
+  const [theme, setTheme] = useState<DemoTheme>(getDemoTheme);
+  useEffect(() => {
+    applyDemoTheme(theme, false);
+  }, [theme]);
+  useEffect(() => watchSystemTheme(setTheme), []);
+  function chooseTheme(next: DemoTheme) {
+    applyDemoTheme(next);
+    setTheme(next);
+  }
   const [focus, setFocus] = useState(0);
   const [variant, setVariant] = useState<Variant>(() => new URL(location.href).searchParams.get('variant') === 'B' ? 'B' : 'A');
   const [prismLines, setPrismLines] = useState<boolean | undefined>();
@@ -67,7 +63,7 @@ function App() {
 
   return (
     <div className="page-shell react-shell">
-      <header className="site-header"><a className="brand" href="./"><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>PrismDeck<span className="version">REACT</span></a><nav aria-label="Project links"><a href="https://github.com/yosun/PrismDeck#readme">Documentation ↗</a><a href="https://github.com/yosun/PrismDeck">GitHub ↗</a></nav></header>
+      <header className="site-header"><a className="brand" href="./"><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>PrismDeck<span className="version">REACT</span></a><div className="header-actions"><div className="theme-switch" role="group" aria-label="Color theme"><button id="theme-light" type="button" aria-pressed={theme === 'light'} onClick={() => chooseTheme('light')}>Day</button><button id="theme-dark" type="button" aria-pressed={theme === 'dark'} onClick={() => chooseTheme('dark')}>Night</button></div><nav aria-label="Project links"><a href="https://github.com/yosun/PrismDeck#readme">Documentation ↗</a><a href="https://github.com/yosun/PrismDeck">GitHub ↗</a></nav></div></header>
       <main>
         <section className="intro" aria-labelledby="intro-title"><div><p className="eyebrow"><span /> YOUR CONTENT. YOUR COMPONENTS.</p><h1 id="intro-title">A new angle on<br /><em>your collection.</em></h1></div><div className="intro-aside"><p>A small React component for a much bigger picture.<br />Bring your content. Choose how it comes into view.</p><div className="feature-tags"><span>React content</span><span>Bounded rendering</span><span>Zero XR loaded</span></div></div></section>
 
@@ -92,6 +88,7 @@ function App() {
               adapter={adapter}
               renderPane={renderPane}
               variant={variant}
+              theme={theme}
               selectionMode={selectionMode}
               prismLines={prismLines}
               timelineRails={timelineRails}
@@ -104,7 +101,7 @@ function App() {
               label="Browse the studies in perspective slide collection"
             />
           </div><span className="stage-axis" aria-hidden="true">SEQUENCE →</span></div>
-          <div className="selection-bar"><div className="focus-info"><span className="focus-number">{String(focused.index + 1).padStart(3, '0')}</span><div><p className="eyebrow">FORM / COLOR / POSSIBILITY</p><h3>{focused.title}</h3></div></div><button className="primary-button" onClick={() => deck.current?.controller.select()}>View pane <span aria-hidden="true">↗</span></button></div>
+          <div className="selection-bar"><div className="focus-info"><span className="focus-number">{String(focused.index + 1).padStart(3, '0')}</span><div><p className="eyebrow">FORM / TONE / POSSIBILITY</p><h3>{focused.title}</h3></div></div><button className="primary-button" onClick={() => deck.current?.controller.select()}>View pane <span aria-hidden="true">↗</span></button></div>
           <p className="selection-status" role="status">{status}</p>
         </section>
         <section className="below-gallery" aria-label="Navigation help"><div className="input-help"><span className="keycap">←</span><span className="keycap">→</span><span>Navigate</span><span className="keycap">+ / −</span><span>Density</span><span className="keycap">↵</span><span>Select</span></div><p>{Math.min(focus + 1, count).toLocaleString()} / {count.toLocaleString()} · 40 preview panes maximum</p></section>

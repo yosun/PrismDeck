@@ -1,6 +1,6 @@
 {
   "name": "prismdeck-monorepo",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -19,7 +19,8 @@
     "pack": "npm run build && node scripts/pack.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:three-browser": "node tests/three-browser.mjs",
-    "test:variants-browser": "node tests/variants-browser.mjs"
+    "test:variants-browser": "node tests/variants-browser.mjs",
+    "test:corners-theme-browser": "node tests/corners-theme-browser.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
