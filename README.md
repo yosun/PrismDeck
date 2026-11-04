@@ -15,7 +15,7 @@ sequence, depth, time, version, or any numerical position.
   modal, with independent prism lines and timeline rails.
 - **Content stays yours:** render DOM or React content; supply your own actions.
 - **Progressive spatial support:** Three.js and XR are separate, optional imports.
-- **Built for input:** keyboard, pointer, touch, pinch, and zoom controls.
+- **Built for input:** keyboard, pointer, touch, pinch, zoom, and camera angle controls.
 - **MIT licensed:** use it in personal, open-source, and commercial applications.
 
 [Live demo](https://yosun.github.io/PrismDeck/) ·
@@ -45,6 +45,12 @@ independently. **Day** uses white and neutral grays;
 **Night** uses dark neutral surfaces. The demo follows your system preference until
 you choose a mode, remembers that choice locally, and supports shareable
 `?theme=light` or `?theme=dark` URLs. Run `npm run dev:react` for the React example.
+
+In every version, open **View angle** (**Angle** on small screens) to adjust the
+horizontal and vertical view,
+or enable **Rotate** and drag the deck with a mouse or one finger. Turn
+**Rotate** off to return dragging to collection navigation. Desktop users can also Shift-drag or
+right-drag to orbit directly. **Reset view** restores the starting perspective.
 
 ## Drop into any page
 
@@ -77,12 +83,12 @@ The standalone browser bundle needs no build tool or framework:
 ```
 
 For production, download and self-host the browser bundle and stylesheet from a
-[pinned release](https://github.com/yosun/PrismDeck/releases/tag/v0.3.0). GitHub
+[pinned release](https://github.com/yosun/PrismDeck/releases/tag/v0.4.0). GitHub
 Pages follows the current demo build. The bundle contains the DOM widget and core;
 it does not include React, Three.js, or XR. All three presets use
 the same bounded content window; the wallet adds no image resources or renderer
-dependency. The standalone build is approximately 10 KB of gzipped JavaScript
-plus a 2.1 KB gzipped stylesheet.
+dependency. The standalone build is approximately 11.8 KB of gzipped JavaScript
+plus a 2.4 KB gzipped stylesheet.
 
 ## Packages
 
@@ -94,7 +100,7 @@ plus a 2.1 KB gzipped stylesheet.
 | `@prismdeck/three` | Optional WebGL image renderer | Core; Three.js peer |
 | `@prismdeck/three/xr` | Explicit, lazy XR helpers | Optional Three.js renderer |
 
-The packages are prepared as version **0.3.0**. This repository does not imply
+The packages are prepared as version **0.4.0**. This repository does not imply
 that the names are available from the npm registry. Build local distributable
 tarballs with:
 
@@ -106,14 +112,14 @@ Install the generated tarballs in your application. Install core first, then the
 renderer or binding you use:
 
 ```sh
-npm install /path/to/PrismDeck/.artifacts/prismdeck-core-0.3.0.tgz
-npm install /path/to/PrismDeck/.artifacts/prismdeck-dom-0.3.0.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-core-0.4.0.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-dom-0.4.0.tgz
 # For React applications:
 npm install react react-dom
-npm install /path/to/PrismDeck/.artifacts/prismdeck-react-0.3.0.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-react-0.4.0.tgz
 # For optional Three.js rendering:
 npm install three
-npm install /path/to/PrismDeck/.artifacts/prismdeck-three-0.3.0.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-three-0.4.0.tgz
 ```
 
 ## React
@@ -284,7 +290,11 @@ additional content resource and disposes it when selection closes or changes.
 | `maxVisible` | Maximum preview panes; defaults to `40` |
 | `initialFocus` | Initial focused index |
 | `initialZoom` | Initial navigation zoom: `0` for close view, `1` for compact overview |
+| `initialView` | Initial signed view controls as `{ yaw?, pitch? }`; both default to `0` |
+| `view` | Updates the signed horizontal/vertical controls as `{ yaw?, pitch? }`; omitted components retain their current value |
+| `onViewChange(view)` | Called when the viewing controls change; receives `{ yaw, pitch }` |
 | `controls` | Whether to show the built-in navigation controls |
+| `cameraControls` | Show the built-in **View angle** controls; defaults to `true` |
 | `label` | Accessible label for the widget |
 
 Supply `getKey` directly or through `adapter`. Keep keys unique and stable across
@@ -313,18 +323,56 @@ second renderer:
 ```ts
 const { controller } = deck;
 const unsubscribe = controller.subscribe(() => {
-  const { focus, zoom, count, selectedKey } = controller.getSnapshot();
-  updateToolbar({ focus, zoom, count, selectedKey });
+  const { focus, zoom, view, count, selectedKey } = controller.getSnapshot();
+  updateToolbar({ focus, zoom, view, count, selectedKey });
 });
 
 controller.move(1);
 controller.focus(250);
 controller.setZoom(0.6);
+controller.setView({ yaw: 15, pitch: -10 });
+controller.resetView();
 controller.select();
 controller.dismiss();
 
 unsubscribe();
 ```
+
+## Change the viewing angle
+
+Versions A, B, and C share the same camera angle state. The built-in **View angle**
+panel has horizontal and vertical sliders, a **Rotate** drag toggle, and
+**Reset view**. The sliders work with a keyboard and touch; enable **Rotate** to
+rotate by dragging with one finger. Turn **Rotate** off for ordinary dragging to
+browse the sequence. Shift-drag and right-drag are desktop shortcuts for orbit.
+Wheel and pinch still change density.
+
+`view.yaw` ranges from `-60` to `60`; `view.pitch` ranges from `-45` to `45`.
+These are signed view controls centered on `0`, rather than absolute Euler
+angles. The prism maps them into a safe viewing range at the current zoom.
+
+The view controls persist through zoom, focus, selection dismissal, and presentation
+or layout changes. A selected pane still faces the viewer in its reading view.
+Prism boundaries and timeline rails turn with their panes; the wallet fan and its
+pocket turn together. Neutral Day and Night modes are independent of the camera.
+
+```ts
+const deck = createPrismDeck(mount, {
+  items, getKey, renderPane,
+  initialView: { yaw: 12, pitch: -8 },
+  cameraControls: true, // Default for every version.
+  onViewChange: (view) => console.log(view.yaw, view.pitch),
+});
+
+deck.controller.setView({ yaw: -15 }); // Keep the current pitch.
+deck.controller.resetView(); // Return to yaw: 0, pitch: 0.
+deck.update({ cameraControls: false }); // Supply your own controls if preferred.
+```
+
+`cameraControls: false` hides the camera controls and disables built-in angle
+gestures and shortcuts while preserving the shared controller API. React accepts the same options and callbacks; use `onReady` to
+access its controller. Camera rotation uses the existing CSS 3D and core geometry
+path and loads no Three.js or XR code.
 
 ## Neutral day and night modes
 
@@ -357,9 +405,9 @@ const controller = createDeckController({
   axis: { label: 'Version' },
 });
 
-const { count, focus, zoom } = controller.getSnapshot();
+const { count, focus, zoom, view } = controller.getSnapshot();
 const geometry = getPrismGeometry({
-  count, focus, zoom,
+  count, focus, zoom, view,
   width: 1200,
   height: 700,
   positions: controller.getPositions(),
@@ -385,6 +433,12 @@ Focus the widget, then use:
 | Enter | Select the focused pane; activate it again for the optional app action |
 | Escape | Dismiss selection |
 | Pointer or touch | Focus and activate a pane |
+| Drag with **Rotate** off | Browse the ordered panes |
+| Drag with **Rotate** on | Change horizontal and vertical camera angles |
+| Shift-drag or right-drag | Orbit directly with a mouse |
+| Alt + Arrow keys | Adjust the viewing angle |
+| `0` | Reset the viewing angle |
+| **View angle** sliders | Adjust the camera with a keyboard or touch |
 | Pinch or zoom slider | Adjust the prism's density |
 
 Zoom lets a collection occupy a more compact volume while preserving navigation.

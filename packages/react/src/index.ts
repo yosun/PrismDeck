@@ -78,6 +78,7 @@ export function PrismDeck<T>(props: PrismDeckProps<T>): ReactElement {
       onFocus: (item, index) => latest.current.onFocus?.(item, index),
       onSelect: (item, index) => latest.current.onSelect?.(item, index),
       onDismiss: () => latest.current.onDismiss?.(),
+      onViewChange: view => latest.current.onViewChange?.(view),
       onActivate: (item, index) => latest.current.onActivate?.(item, index),
     });
     instance.current = deck;
@@ -102,6 +103,8 @@ export function PrismDeck<T>(props: PrismDeckProps<T>): ReactElement {
       maxVisible: props.maxVisible,
       label: props.label,
       controls: props.controls,
+      cameraControls: props.cameraControls,
+      view: props.view,
       theme: props.theme,
       variant: props.variant,
       layout: props.layout,
@@ -111,7 +114,7 @@ export function PrismDeck<T>(props: PrismDeckProps<T>): ReactElement {
       transitionDuration: props.transitionDuration,
       renderSelection: props.renderSelection ? selectionRenderer.current : undefined,
     });
-  }, [props.items, props.getKey, props.adapter, props.axis, props.maxVisible, props.label, props.controls, props.theme, props.variant, props.layout, props.selectionMode, props.prismLines, props.timelineRails, props.transitionDuration, !!props.renderSelection]);
+  }, [props.items, props.getKey, props.adapter, props.axis, props.maxVisible, props.label, props.controls, props.cameraControls, props.view, props.theme, props.variant, props.layout, props.selectionMode, props.prismLines, props.timelineRails, props.transitionDuration, !!props.renderSelection]);
 
   return createElement(
     Fragment,
@@ -153,3 +156,5 @@ export type { PrismDeckInstance, PrismDeckOptions } from '@prismdeck/dom';
 
 export { PRISMDECK_PRESETS } from '@prismdeck/dom';
 export type { PrismDeckVariant, PrismDeckSelectionMode, PrismDeckPresentationOptions, PrismDeckTheme, PrismDeckLayout } from '@prismdeck/dom';
+
+export type { ViewAngle } from '@prismdeck/core';

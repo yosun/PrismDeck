@@ -22,7 +22,7 @@ Application content and activation actions
             \     │     /
               Core controller
               order · geometry
-              focus · zoom
+           focus · zoom · view
 ```
 
 `@prismdeck/core` is independent of React, the DOM, Three.js, and WebXR.
@@ -31,8 +31,8 @@ binding delegates navigation to the same controller and DOM layer.
 
 The Three.js renderer is a separate entry point. Its `getImage` adapter supplies
 image sources for visible panes. It can share a controller with the DOM view so
-both views have the same focus and zoom. Arbitrary DOM or React elements are not
-automatically rasterized into WebGL or XR; provide an image representation when
+both views have the same focus, zoom, and camera angle. Arbitrary DOM or React
+elements are not automatically rasterized into WebGL or XR; provide an image representation when
 using those renderers.
 
 XR helpers live behind the explicit `@prismdeck/three/xr` subpath. The ordinary
@@ -113,6 +113,35 @@ activation of the already selected pane; an application may use it to open an
 editor, inspect a scan, or compare versions. Setting `selectionMode: 'none'`
 leaves the entire detail interface to the application. PrismDeck does not choose
 routes, application actions, or network requests.
+
+## Shared camera angle
+
+The headless controller owns signed `view: { yaw, pitch }` controls centered on
+zero, with yaw bounded to `-60…60` and pitch to `-45…45`. These values are not
+absolute Euler angles. The prism maps their full ranges into safe front-facing
+azimuth and elevation at the current zoom, avoiding unresponsive slider travel
+near the limits. Zero retains the renderer's starting perspective. `setView` changes either
+or both components; `resetView` returns both to zero. Focus, selection, zoom, and
+presentation changes preserve this state. An adapter does not need to understand
+camera controls or assign semantic meaning to an angle.
+
+The DOM renderer turns the prism camera basis for both content and guides. This
+keeps the cross section and its pane corners aligned while orbiting. Wallet
+layout applies the same user angle to a volume containing the fan and pocket,
+so its cards remain inside a coherent object. Selection uses its own reading
+presentation and retains the collection's angle for dismissal.
+
+The shared **View angle** panel supplies horizontal and vertical sliders, a
+**Rotate** drag toggle, and reset. Enabling **Rotate** makes one-finger orbit
+available on touchscreens; turning it off preserves normal sequence dragging. Shift-drag
+and right-drag provide mouse shortcuts; Alt + Arrow keys and `0` support keyboard
+adjustment and reset. Wheel and pinch retain their density behavior.
+
+`cameraControls` controls this UI independently of the navigation toolbar.
+Setting it to false hides the panel and disables built-in angle gestures and
+shortcuts. Applications can drive the same controller state with their own interface. React forwards these options and callbacks rather than creating a
+second camera state. The ordinary DOM camera path uses CSS 3D and core math;
+changing the angle never imports Three.js or XR.
 
 ## Geometry and neutral themes
 

@@ -1,6 +1,6 @@
 {
   "name": "prismdeck-monorepo",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -21,7 +21,8 @@
     "test:three-browser": "node tests/three-browser.mjs",
     "test:variants-browser": "node tests/variants-browser.mjs",
     "test:corners-theme-browser": "node tests/corners-theme-browser.mjs",
-    "test:wallet-browser": "node tests/wallet-browser.mjs"
+    "test:wallet-browser": "node tests/wallet-browser.mjs",
+    "test:view-browser": "node tests/view-browser.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

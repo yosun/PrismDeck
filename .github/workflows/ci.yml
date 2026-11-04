@@ -24,6 +24,7 @@ jobs:
       - run: npm run test:browser
       - run: npm run test:variants-browser
       - run: npm run test:wallet-browser
+      - run: npm run test:view-browser
       - run: npm run test:corners-theme-browser
       - run: npm run test:three-browser
       - run: npm run pack

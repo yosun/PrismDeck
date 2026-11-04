@@ -7,7 +7,7 @@ import { readFile } from 'node:fs/promises';
 test('default browser bundle contains no Three, React, XR, or other runtime dependency', async () => {
   const result = await build({entryPoints:['packages/dom/dist/index.js'],bundle:true,minify:true,format:'esm',target:'es2022',write:false,metafile:true});
   const inputs = Object.keys(result.metafile.inputs);
-  assert.ok(inputs.every(file => /packages\/(core|dom)\/dist\/(index|options|guides|wallet)\.js$/.test(file)), inputs.join('\n'));
+  assert.ok(inputs.every(file => /packages\/(core|dom)\/dist\/(index|options|guides|wallet|wallet-view)\.js$/.test(file)), inputs.join('\n'));
   assert.ok(gzipSync(result.outputFiles[0].contents).length < 12288, 'core + DOM stays under the 12 KiB gzip budget');
   const module = await import('../dist/prismdeck.js');
   assert.equal(typeof module.createPrismDeck, 'function');

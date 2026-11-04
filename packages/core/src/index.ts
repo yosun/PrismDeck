@@ -5,6 +5,12 @@ export type { WalletLayout, WalletLayoutOptions, WalletPaneLayout } from './wall
 export type PrismKey = string | number;
 export type PrismVector3 = [number, number, number];
 
+/** Signed view controls; zero retains the default. Renderers map their ranges into safe camera angles. */
+export interface ViewAngle {
+  readonly yaw: number;
+  readonly pitch: number;
+}
+
 export interface PrismAxis {
   label?: string;
   unit?: string;
@@ -22,6 +28,8 @@ export interface PrismSnapshot {
   readonly focus: number;
   /** 0 is the close view; 1 is the compact overview. */
   readonly zoom: number;
+  /** Viewing angle is independent of focus, selection, and density. */
+  readonly view: ViewAngle;
   readonly selectedKey: PrismKey | null;
   readonly count: number;
   readonly revision: number;
@@ -33,6 +41,8 @@ export interface DeckControllerOptions<T> {
   adapter?: PrismAdapter<T>;
   initialFocus?: number;
   initialZoom?: number;
+  initialView?: Partial<ViewAngle>;
+  onViewChange?: (view: ViewAngle) => void;
   onFocus?: (item: T, index: number) => void;
   onSelect?: (item: T, index: number) => void;
   axis?: PrismAxis;
@@ -50,6 +60,8 @@ export interface DeckController<T> {
   select(index?: number): void;
   dismiss(): void;
   setZoom(amount: number): void;
+  setView(view: Partial<ViewAngle>): void;
+  resetView(): void;
   setItems(items: readonly T[]): void;
   /** Refresh configuration without replacing the controller or its subscriptions. */
   configure(options: Partial<DeckControllerOptions<T>>): void;
@@ -66,6 +78,14 @@ export type PrismDeckController<T> = DeckController<T>;
 
 export function clamp(value: number, min = 0, max = 1): number {
   return Math.min(max, Math.max(min, value));
+}
+
+/** Normalize renderer input without allowing invalid values into camera geometry. */
+export function clampView(view: Partial<ViewAngle> = {}, fallback: ViewAngle = { yaw: 0, pitch: 0 }): ViewAngle {
+  return {
+    yaw: clamp(Number.isFinite(view.yaw) ? view.yaw! : fallback.yaw, -60, 60),
+    pitch: clamp(Number.isFinite(view.pitch) ? view.pitch! : fallback.pitch, -45, 45),
+  };
 }
 
 /** A logarithmic compression keeps density changes perceptually even. */
@@ -134,6 +154,7 @@ export function createDeckController<T>(initial: DeckControllerOptions<T>): Deck
   let snapshot: PrismSnapshot = Object.freeze({
     focus: indexFor(Number.isFinite(options.initialFocus) ? options.initialFocus! : 0),
     zoom: clamp(Number.isFinite(options.initialZoom) ? options.initialZoom! : 0),
+    view: Object.freeze(clampView(options.initialView)),
     selectedKey: null,
     count: entries.length,
     revision: 0,
@@ -150,6 +171,16 @@ export function createDeckController<T>(initial: DeckControllerOptions<T>): Deck
     if (next === snapshot.focus) return;
     publish({ focus: next });
     options.onFocus?.(entries[next].item, next);
+  }
+
+  function setView(view: Partial<ViewAngle>): void {
+    if (disposed || (view.yaw !== undefined && !Number.isFinite(view.yaw))
+      || (view.pitch !== undefined && !Number.isFinite(view.pitch))) return;
+    const next = clampView(view, snapshot.view);
+    if (next.yaw === snapshot.view.yaw && next.pitch === snapshot.view.pitch) return;
+    const frozen = Object.freeze(next);
+    publish({ view: frozen });
+    options.onViewChange?.(frozen);
   }
 
   function configure(next: Partial<DeckControllerOptions<T>>): void {
@@ -213,6 +244,8 @@ export function createDeckController<T>(initial: DeckControllerOptions<T>): Deck
       const zoom = clamp(amount);
       if (zoom !== snapshot.zoom) publish({ zoom });
     },
+    setView,
+    resetView: () => setView({ yaw: 0, pitch: 0 }),
     setItems: (input) => configure({ items: input }),
     configure,
     subscribe(listener) {
@@ -237,6 +270,8 @@ export interface PrismGeometryOptions {
   paneHeight?: number;
   /** Sorted numeric coordinates. Gaps are normalized by the smallest positive gap. */
   positions?: readonly number[];
+  /** User viewing-angle offsets, shared by DOM, React, and on-screen Three views. */
+  view?: Partial<ViewAngle>;
 }
 
 export interface PrismCamera {
@@ -313,8 +348,13 @@ export function getPrismGeometry(options: PrismGeometryOptions): PrismGeometry {
     return lerp(normalized[lower], normalized[Math.min(count - 1, lower + 1)], bounded - lower) * spacing;
   };
   const length = coordinateAt(count - 1);
-  const azimuth = lerp(24, 58, zoom) * Math.PI / 180;
-  const elevation = lerp(6, 18, zoom) * Math.PI / 180;
+  const view = clampView(options.view);
+  // Map each half of the angle controls to the available orbit range. Additive
+  // clamps would produce dead slider travel near the overview's wider azimuth.
+  const angle = (base: number, offset: number, limit: number, inputLimit: number) =>
+    base + offset / inputLimit * (offset < 0 ? limit + base : limit - base);
+  const azimuth = angle(lerp(24, 58, zoom), view.yaw, 75, 60) * Math.PI / 180;
+  const elevation = angle(lerp(6, 18, zoom), view.pitch, 60, 45) * Math.PI / 180;
   const direction: PrismVector3 = [Math.cos(azimuth) * Math.cos(elevation), -Math.sin(elevation), -Math.sin(azimuth) * Math.cos(elevation)];
   const right: PrismVector3 = [Math.sin(azimuth), 0, Math.cos(azimuth)];
   const up: PrismVector3 = [Math.cos(azimuth) * Math.sin(elevation), Math.cos(elevation), -Math.sin(azimuth) * Math.sin(elevation)];

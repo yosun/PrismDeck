@@ -1,17 +1,27 @@
 import { createDeckController, getPrismGeometry, getWalletLayout, visibleIndices } from '@prismdeck/core';
-import type { PrismAdapter, PrismKey, PrismGeometry, PrismCamera, WalletPaneLayout } from '@prismdeck/core';
+import type { PrismAdapter, PrismKey, PrismGeometry, PrismCamera, WalletPaneLayout, ViewAngle } from '@prismdeck/core';
 
+import { getWalletView } from './wallet-view.js';
+export type { ViewAngle } from '@prismdeck/core';
 import { createPrismGuides, drawPrismGuides } from './guides.js';
 import { resolvePresentationOptions, resolveTheme } from './options.js';
 import type { PrismDeckPresentationOptions, PrismDeckTheme, PrismDeckLayout } from './options.js';
 export { PRISMDECK_PRESETS, resolvePresentationOptions } from './options.js';
 export type { PrismDeckVariant, PrismDeckSelectionMode, PrismDeckPresentationOptions, PrismDeckTheme, PrismDeckLayout } from './options.js';
 
+let nextViewPanelId = 0;
+
 export type PaneContent = Node | string | { element: Node; dispose?: () => void };
 export interface PrismDeckOptions<T> extends PrismDeckPresentationOptions {
   items: readonly T[];
   /** Neutral day/night scheme; system follows the operating system live. */
   theme?: PrismDeckTheme;
+  initialView?: Partial<ViewAngle>;
+  /** Set the shared viewing angle independently of the variant. */
+  view?: Partial<ViewAngle>;
+  onViewChange?: (view: ViewAngle) => void;
+  /** Built-in angle toolbar, gestures, and shortcuts; controller methods always remain available. */
+  cameraControls?: boolean;
   getKey?: (item: T) => PrismKey;
   adapter?: PrismAdapter<T>;
   renderPane?: (item: T, index: number) => PaneContent;
@@ -47,7 +57,7 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
   let appearance = resolvePresentationOptions(options);
   const colorPreference = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
   resolveTheme(options.theme, colorPreference?.matches);
-  const controller = createDeckController<T>(options);
+  const controller = createDeckController<T>({...options, initialView: options.view ?? options.initialView});
   const element = document.createElement('section');
   element.className = `prismdeck ${options.className ?? ''}`;
   const applyTheme = () => { element.dataset.prismdeckTheme = resolveTheme(options.theme, colorPreference?.matches); };
@@ -65,7 +75,8 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
   const pocket = document.createElement('div'); pocket.className = 'prismdeck-wallet-pocket';
   pocket.setAttribute('aria-hidden', 'true'); pocket.hidden = true;
   const pocketLabel = document.createElement('span'); pocketLabel.className = 'prismdeck-wallet-label'; pocket.append(pocketLabel);
-  viewport.append(pocket, guides, stage);
+  const volume = document.createElement('div'); volume.className = 'prismdeck-volume';
+  volume.append(pocket, guides, stage); viewport.append(volume);
   const status = document.createElement('div');
   status.className = 'prismdeck-status';
   status.setAttribute('aria-live', 'polite');
@@ -83,7 +94,35 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
   zoom.addEventListener('input', () => browse(() => controller.setZoom(Number(zoom.value))));
   zoomLabel.append(zoom);
   const select = button('Select focused pane', 'Open pane', () => activate(controller.getSnapshot().focus));
-  controls.append(previous, zoomLabel, next, select);
+  select.className = 'prismdeck-open-pane';
+  let orbitMode = false;
+  const viewToggle = button('View angle', 'View angle', () => {
+    viewPanel.hidden = !viewPanel.hidden; viewToggle.setAttribute('aria-expanded', String(!viewPanel.hidden));
+    if (!viewPanel.hidden) yawInput.focus({preventScroll: true});
+  });
+  viewToggle.className = 'prismdeck-view-toggle'; viewToggle.setAttribute('aria-expanded', 'false');
+  const viewPanel = document.createElement('section'); viewPanel.className = 'prismdeck-view-panel'; viewPanel.hidden = true;
+  viewPanel.setAttribute('aria-label', 'Viewing angle');
+  viewPanel.id = `prismdeck-view-${++nextViewPanelId}`; viewToggle.setAttribute('aria-controls', viewPanel.id);
+  const viewHeader = document.createElement('div'); viewHeader.className = 'prismdeck-view-header';
+  const viewTitle = document.createElement('strong'); viewTitle.textContent = 'Viewing angle';
+  const orbitToggle = button('Drag to rotate', 'Rotate', () => {
+    orbitMode = !orbitMode; updateOrbitMode(); element.focus({preventScroll: true});
+  });
+  orbitToggle.className = 'prismdeck-orbit-toggle'; orbitToggle.setAttribute('aria-pressed', 'false');
+  const resetView = button('Reset view', 'Reset', () => controller.resetView()); resetView.className = 'prismdeck-view-reset';
+  viewHeader.append(viewTitle, orbitToggle, resetView);
+  const yawLabel = document.createElement('label'); yawLabel.textContent = 'Horizontal';
+  const yawInput = document.createElement('input'); yawInput.type = 'range'; yawInput.min = '-60'; yawInput.max = '60'; yawInput.step = '1'; yawInput.setAttribute('aria-label', 'Horizontal view angle');
+  yawInput.addEventListener('input', () => controller.setView({yaw: Number(yawInput.value)}));
+  const yawValue = document.createElement('output'); yawLabel.append(yawInput, yawValue);
+  const pitchLabel = document.createElement('label'); pitchLabel.textContent = 'Vertical';
+  const pitchInput = document.createElement('input'); pitchInput.type = 'range'; pitchInput.min = '-45'; pitchInput.max = '45'; pitchInput.step = '1'; pitchInput.setAttribute('aria-label', 'Vertical view angle');
+  pitchInput.addEventListener('input', () => controller.setView({pitch: Number(pitchInput.value)}));
+  const pitchValue = document.createElement('output'); pitchLabel.append(pitchInput, pitchValue);
+  const viewHint = document.createElement('p'); viewHint.textContent = 'Shift-drag or right-drag to rotate. Turn on Rotate for touch.';
+  viewPanel.append(viewHeader, yawLabel, pitchLabel, viewHint);
+  controls.append(previous, zoomLabel, next, select, viewToggle);
   element.append(viewport, status, controls);
   mount.append(element);
   const presentation = document.createElement('div');
@@ -91,23 +130,24 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
   const selectionViewport = document.createElement('div');
   selectionViewport.className = 'prismdeck-selection-viewport';
   const selectionStage = document.createElement('div'); selectionStage.className = 'prismdeck-stage';
-  selectionViewport.append(selectionStage);
+  const selectionVolume = document.createElement('div'); selectionVolume.className = 'prismdeck-volume';
+  selectionVolume.append(selectionStage); selectionViewport.append(selectionVolume);
   const back = button('Back to deck', '← Back to deck', dismiss);
   back.className = 'prismdeck-selection-back';
   const selectionLabel = document.createElement('div'); selectionLabel.className = 'prismdeck-selection-label';
-  presentation.append(selectionViewport, back, selectionLabel); element.append(presentation);
+  presentation.append(selectionViewport, back, selectionLabel); element.append(presentation, viewPanel);
   presentation.addEventListener('click', event => {
     if (event.target === presentation || event.target === selectionViewport) dismiss();
   });
   viewport.addEventListener('click', event => {
-    if (selected && selected.mode === 'slide-out') { event.preventDefault(); event.stopPropagation(); dismiss(); }
+    if (selected && selected.mode === 'slide-out' && !suppressClick) { event.preventDefault(); event.stopPropagation(); dismiss(); }
   }, true);
   const mounted = new Map<PrismKey, MountedPane>();
   let selected: { key: PrismKey; index: number; pane: MountedPane; mode: 'slide-out' | 'modal'; layout: PrismDeckLayout; indices: readonly number[];
     amount: number; focus: number; zoom: number; detail?: HTMLElement; disposeDetail?: () => void } | null = null;
   let dialog: HTMLDialogElement | null = null;
   const pointers = new Map<number, {x: number; y: number}>();
-  let drag: { id: number; x: number; focus: number; moved: boolean } | null = null;
+  let drag: { id: number; x: number; y: number; focus: number; moved: boolean; view?: ViewAngle } | null = null;
   let pinch: { distance: number; zoom: number } | null = null;
   let suppressClick = false;
   let suppressTimer: ReturnType<typeof setTimeout> | undefined;
@@ -174,7 +214,7 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     if (selected) {
       selected.disposeDetail?.(); selected.detail?.remove(); selected.pane.content.hidden = false;
       stage.append(selected.pane.element);
-      const restored = getPrismGeometry({count: controller.getSnapshot().count, focus: Math.max(0, selected.focus), zoom: selected.zoom, width, height, positions: controller.getPositions()});
+      const restored = getPrismGeometry({count: controller.getSnapshot().count, focus: Math.max(0, selected.focus), zoom: selected.zoom, width, height, positions: controller.getPositions(), view: controller.getSnapshot().view});
       if (selected.layout === 'wallet') {
         const pose = walletLayout(selected.focus, selected.zoom, selected.indices).panes.find(pane => pane.index === selected!.index);
         if (pose) placeWalletPane(selected.pane, pose);
@@ -273,6 +313,21 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
       width: mix(pose.width, readingWidth), height: mix(pose.height, readingWidth * 9 / 16),
       rotateZ: pose.rotateZ * (1 - amount), scale: mix(pose.scale, 1), zIndex: 100}, amount);
   }
+  function updateOrbitMode() {
+    orbitToggle.setAttribute('aria-pressed', String(orbitMode));
+    element.dataset.prismdeckOrbit = String(orbitMode);
+    viewToggle.classList.toggle('is-orbiting', orbitMode);
+    viewToggle.setAttribute('aria-description', orbitMode ? 'Rotation is on. Open controls to switch back to browsing.' : 'Open viewing-angle sliders and drag rotation controls.');
+    viewHint.textContent = orbitMode ? 'Drag the deck to change angle. Turn off Rotate to browse panes.' : 'Shift-drag or right-drag to rotate. Turn on Rotate for touch.';
+    viewToggle.title = orbitMode ? 'Rotate is on: drag to change angle' : 'View angle · Shift-drag or right-drag to rotate';
+  }
+  function applyWalletView(target: HTMLElement, cameraViewport: HTMLElement, layout: ReturnType<typeof walletLayout>, view: ViewAngle) {
+    const camera = getWalletView(layout, view, width, height);
+    target.style.transformOrigin = `${camera.origin[0]}px ${camera.origin[1]}px`;
+    target.style.transform = camera.transform;
+    cameraViewport.style.perspective = camera.transform === 'none' ? 'none' : `${camera.perspective}px`;
+    cameraViewport.style.perspectiveOrigin = `${camera.origin[0]}px ${camera.origin[1]}px`;
+  }
   function render(time: number) {
     frame = 0;
     if (disposed) return;
@@ -290,10 +345,12 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     }
     if (Math.abs(viewFocus - state.focus) < 0.001) viewFocus = state.focus;
     if (Math.abs(viewZoom - state.zoom) < 0.0001) viewZoom = state.zoom;
-    const geometry = getPrismGeometry({ count: state.count, focus: Math.max(0, selected?.focus ?? viewFocus), zoom: selected?.zoom ?? viewZoom, width, height, positions: controller.getPositions() });
+    const geometry = getPrismGeometry({ count: state.count, focus: Math.max(0, selected?.focus ?? viewFocus), zoom: selected?.zoom ?? viewZoom, width, height, positions: controller.getPositions(), view: state.view });
     const { camera } = geometry;
     const isWallet = appearance.layout === 'wallet';
     viewport.style.perspective = isWallet ? 'none' : `${camera.focalLength}px`;
+    viewport.style.perspectiveOrigin = '50% 50%';
+    volume.style.transform = 'none';
     const frozen = isWallet && selected ? selected.indices.filter(index => index >= 0 && index < state.count)
       .sort((a, b) => Math.abs(a - selected!.index) - Math.abs(b - selected!.index))
       .slice(0, walletIndices(selected.index, selected.zoom).length).sort((a, b) => a - b) : undefined;
@@ -305,6 +362,7 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     if (wallet) {
       Object.assign(pocket.style, {left: `${wallet.pocket.x}px`, top: `${wallet.pocket.y}px`, width: `${wallet.pocket.width}px`, height: `${wallet.pocket.height}px`});
       pocketLabel.textContent = options.axis?.label ?? 'COLLECTION';
+      applyWalletView(volume, viewport, wallet, state.view);
     }
     if (selected && !indices.includes(selected.index) && state.count) { indices.pop(); indices.push(selected.index); }
     const wanted = new Set(indices.map(index => controller.getKey(index)!));
@@ -347,8 +405,13 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
           selectionViewport.style.perspective = 'none';
           viewport.style.transformOrigin = '50% 50%';
           viewport.style.transform = `translateY(${height * 0.24 * amount}px) scale(${1 - 0.45 * amount})`;
-          if (pose) readWalletPane(pane, pose, amount);
+          if (pose) {
+            readWalletPane(pane, pose, amount);
+            const actual = JSON.parse(pane.element.dataset.prismdeckWalletPose!) as WalletPaneLayout;
+            applyWalletView(selectionVolume, selectionViewport, {...wallet!, panes: [...wallet!.panes, actual]}, {yaw: state.view.yaw * (1 - amount), pitch: state.view.pitch * (1 - amount)});
+          }
         } else {
+          selectionVolume.style.transform = 'none'; selectionViewport.style.perspectiveOrigin = '50% 50%';
           const selectionCamera = cameraAtExtraction(geometry, index, amount);
           selectionViewport.style.perspective = `${selectionCamera.focalLength}px`;
           selectionViewport.dataset.prismdeckCamera = JSON.stringify(selectionCamera);
@@ -372,6 +435,14 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
       if (amount === 0 && target === 0) { resetPresentation(); schedule(); }
     }
     drawPrismGuides(guides, geometry, {width, height, prismLines: !isWallet && appearance.prismLines, timelineRails: !isWallet && appearance.timelineRails, indices, focus: state.focus});
+    element.dataset.prismdeckView = JSON.stringify(state.view);
+    viewToggle.hidden = options.cameraControls === false;
+    if (options.cameraControls === false) { viewPanel.hidden = true; orbitMode = false; updateOrbitMode(); viewToggle.setAttribute('aria-expanded', 'false'); }
+    viewPanel.style.bottom = `${controls.offsetHeight + status.offsetHeight + 8}px`;
+    yawInput.value = String(state.view.yaw); pitchInput.value = String(state.view.pitch);
+    yawValue.value = state.view.yaw > 0 ? `R ${Math.round(state.view.yaw)}` : state.view.yaw < 0 ? `L ${Math.round(-state.view.yaw)}` : 'Center';
+    pitchValue.value = state.view.pitch > 0 ? `Up ${Math.round(state.view.pitch)}` : state.view.pitch < 0 ? `Down ${Math.round(-state.view.pitch)}` : 'Level';
+    yawInput.setAttribute('aria-valuetext', yawValue.value); pitchInput.setAttribute('aria-valuetext', pitchValue.value);
     element.dataset.prismdeckVariant = appearance.variant;
     element.dataset.prismdeckLayout = appearance.layout;
     zoom.setAttribute('aria-label', isWallet ? 'Wallet spread' : 'Prism overview');
@@ -385,7 +456,10 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     zoom.setAttribute('aria-valuetext', `${Math.round(state.zoom * 100)}% ${isWallet ? 'spread' : 'overview'}`);
     previous.disabled = state.focus <= 0; next.disabled = state.focus >= state.count - 1;
     select.disabled = state.count === 0;
-    controls.hidden = options.controls === false;
+    for (const navigation of [previous, zoomLabel, next, select]) navigation.hidden = options.controls === false;
+    controls.hidden = options.controls === false && options.cameraControls === false;
+    select.textContent = width < 480 ? 'Open' : 'Open pane';
+    viewToggle.textContent = width < 480 ? 'Angle' : 'View angle';
     element.dataset.prismdeckCount = String(state.count);
     element.dataset.prismdeckMounted = String(mounted.size);
     if (!selected && (viewFocus !== state.focus || viewZoom !== state.zoom)) schedule();
@@ -397,7 +471,17 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
   observer.observe(viewport);
   const onKey = (event: KeyboardEvent) => {
     if ((event.target as Element).closest('.prismdeck') !== element) return;
+    if (options.cameraControls !== false && event.altKey && event.key.startsWith('Arrow') && !isControl(event.target)) {
+      const view = controller.getSnapshot().view;
+      if (event.key === 'ArrowLeft') controller.setView({yaw: view.yaw - 5});
+      if (event.key === 'ArrowRight') controller.setView({yaw: view.yaw + 5});
+      if (event.key === 'ArrowUp') controller.setView({pitch: view.pitch + 5});
+      if (event.key === 'ArrowDown') controller.setView({pitch: view.pitch - 5});
+      event.preventDefault(); return;
+    }
+    if (options.cameraControls !== false && event.key === '0' && !event.metaKey && !event.ctrlKey && !isControl(event.target)) { controller.resetView(); event.preventDefault(); return; }
     if (event.key === 'Escape' && controller.getSnapshot().selectedKey !== null) { event.preventDefault(); dismiss(); return; }
+    if (event.key === 'Escape' && !viewPanel.hidden) { viewPanel.hidden = true; viewToggle.setAttribute('aria-expanded', 'false'); viewToggle.focus({preventScroll: true}); return; }
     if (event.ctrlKey || event.metaKey || event.altKey || (isControl(event.target) && !(event.target as Element).closest('.prismdeck-pane-select'))) return;
     if ((event.key === 'Enter' || event.key === ' ') && (event.target as Element).closest('.prismdeck-pane-select')) return;
     switch (event.key) {
@@ -439,15 +523,16 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
   };
   const onDown = (event: PointerEvent) => {
     // Pane activation handles a click; touch/drag still works when it starts on the pane's selection surface.
-    if (selected) return;
-    if (event.button !== 0 || (isControl(event.target) && !(event.target as Element).closest('.prismdeck-pane-select'))) return;
+    const orbit = options.cameraControls !== false && (orbitMode || event.shiftKey || event.button === 2);
+    if (selected && !orbit) return;
+    if ((!orbit && event.button !== 0) || (isControl(event.target) && !(event.target as Element).closest('.prismdeck-pane-select'))) return;
     element.focus({preventScroll: true});
     pointers.set(event.pointerId, {x: event.clientX, y: event.clientY});
     if (pointers.size === 2) {
       pinch = {distance: Math.max(1, distance()), zoom: controller.getSnapshot().zoom}; drag = null;
       for (const id of pointers.keys()) viewport.setPointerCapture(id);
       quietClick();
-    } else if (!pinch) drag = {id: event.pointerId, x: event.clientX, focus: controller.getSnapshot().focus, moved: false};
+    } else if (!pinch) drag = {id: event.pointerId, x: event.clientX, y: event.clientY, focus: controller.getSnapshot().focus, moved: false, view: orbit ? controller.getSnapshot().view : undefined};
   };
   const onMove = (event: PointerEvent) => {
     if (!pointers.has(event.pointerId)) return;
@@ -457,16 +542,25 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     }
     if (!drag || drag.id !== event.pointerId) return;
     const dx = event.clientX - drag.x;
-    if (Math.abs(dx) > 6) { drag.moved = true; viewport.setPointerCapture(event.pointerId); }
-    if (drag.moved) { controller.focus(drag.focus - dx / 64); quietClick(); }
+    const dy = event.clientY - drag.y;
+    if (Math.hypot(dx, drag.view ? dy : 0) > 6) { drag.moved = true; viewport.setPointerCapture(event.pointerId); }
+    if (drag.moved) {
+      if (drag.view && options.cameraControls === false) return;
+      if (drag.view) controller.setView({yaw: drag.view.yaw + dx * 0.2, pitch: drag.view.pitch - dy * 0.2});
+      else controller.focus(drag.focus - dx / 64);
+      quietClick();
+    }
   };
   const onUp = (event: PointerEvent) => {
     if (!pointers.has(event.pointerId)) return;
     pointers.delete(event.pointerId);
     if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
-    if (pinch || drag?.moved) quietClick();
+    if (pinch || drag?.moved || drag?.view) quietClick();
     if (!pointers.size) { drag = null; pinch = null; }
   };
+  const onContext = (event: MouseEvent) => { if (options.cameraControls !== false) event.preventDefault(); };
+  viewport.addEventListener('contextmenu', onContext);
+  updateOrbitMode();
   element.addEventListener('keydown', onKey);
   viewport.addEventListener('wheel', onWheel, {passive: false});
   viewport.addEventListener('pointerdown', onDown);
@@ -488,6 +582,7 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
       resolveTheme(candidate.theme, colorPreference?.matches);
       // Configure validates before replacing state; rejected updates preserve the old widget.
       controller.configure(next);
+      if (next.view) controller.setView(next.view);
       const contentChanged = candidate.renderPane !== options.renderPane;
       if (contentChanged || candidate.renderSelection !== options.renderSelection || nextAppearance.selectionMode !== appearance.selectionMode || nextAppearance.layout !== appearance.layout) resetPresentation();
       options = { ...candidate, items: controller.getItems() }; appearance = nextAppearance;

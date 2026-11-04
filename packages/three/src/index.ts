@@ -15,7 +15,7 @@ import {
 } from 'three';
 import type { Texture, WebGLRendererParameters } from 'three';
 import { getPrismGeometry, visibleIndices } from '@prismdeck/core';
-import type { DeckController, PrismKey } from '@prismdeck/core';
+import type { DeckController, PrismKey, ViewAngle } from '@prismdeck/core';
 
 export interface PrismImage {
   url: string;
@@ -35,6 +35,8 @@ export interface ThreePrismDeckOptions<T> {
   physicalWidth?: number;
   pixelRatio?: number;
   label?: string;
+  /** Enable on-screen viewing-angle gestures and keyboard shortcuts (default true). */
+  cameraControls?: boolean;
   crossOrigin?: string;
   rendererOptions?: Omit<WebGLRendererParameters, 'canvas'>;
   onError?: (error: unknown) => void;
@@ -84,7 +86,7 @@ export function createThreePrismDeck<T>(
   canvas.style.cssText = 'display:block;width:100%;height:100%;touch-action:none;';
   canvas.tabIndex = 0;
   canvas.setAttribute('role', 'application');
-  canvas.setAttribute('aria-label', options.label ?? 'PrismDeck. Arrow keys browse; Enter selects; plus and minus change density.');
+  canvas.setAttribute('aria-label', options.label ?? `PrismDeck. Arrow keys browse; Enter selects; plus and minus change density.${options.cameraControls === false ? '' : ' Shift-drag or right-drag changes viewing angle; Alt-arrow keys rotate; 0 resets the view.'}`);
   mount.append(canvas);
 
   const scene = new Scene();
@@ -105,7 +107,7 @@ export function createThreePrismDeck<T>(
   let frame = 0;
   let positionedItems: readonly T[] | undefined;
   let suppliedPositions: readonly number[] | undefined;
-  let drag: { id: number; x: number; y: number; focus: number; moved: boolean } | null = null;
+  let drag: { id: number; x: number; y: number; focus: number; moved: boolean; orbit: boolean; view: ViewAngle } | null = null;
   const pointers = new Map<number, { x: number; y: number }>();
   let pinch: { distance: number; zoom: number } | null = null;
   let xrCleanup: (() => void) | undefined;
@@ -151,6 +153,8 @@ export function createThreePrismDeck<T>(
       paneWidth: options.paneWidth,
       paneHeight: options.paneHeight,
       positions: options.getPosition ? suppliedPositions : controller.getPositions(),
+      // Headset pose remains native; user orbit applies only to the screen view.
+      view: renderer.xr.isPresenting ? undefined : snapshot.view,
     });
     const indices = visibleIndices(snapshot.count, snapshot.focus, options.maxVisible ?? 40, snapshot.zoom);
     const keep = new Set(indices.map((index) => controller.getKey(index)!));
@@ -256,7 +260,10 @@ export function createThreePrismDeck<T>(
   }
 
   function pointerDown(event: PointerEvent): void {
-    if (event.button !== 0) return;
+    const orbit = options.cameraControls !== false && !renderer.xr.isPresenting
+      && (event.button === 2 || (event.button === 0 && event.shiftKey));
+    if (event.button !== 0 && !orbit) return;
+    if (orbit) event.preventDefault();
     canvas.focus({ preventScroll: true });
     canvas.setPointerCapture(event.pointerId);
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -264,7 +271,8 @@ export function createThreePrismDeck<T>(
       pinch = { distance: pointerDistance(), zoom: controller.getSnapshot().zoom };
       drag = null;
     } else if (!pinch) {
-      drag = { id: event.pointerId, x: event.clientX, y: event.clientY, focus: controller.getSnapshot().focus, moved: false };
+      const state = controller.getSnapshot();
+      drag = { id: event.pointerId, x: event.clientX, y: event.clientY, focus: state.focus, moved: false, orbit, view: state.view };
     }
   }
 
@@ -281,7 +289,12 @@ export function createThreePrismDeck<T>(
     }
     if (drag?.id === event.pointerId) {
       if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) > 5) drag.moved = true;
-      if (drag.moved) controller.focus(drag.focus + Math.round((drag.x - event.clientX) / 28));
+      if (drag.moved) {
+        if (drag.orbit && !renderer.xr.isPresenting) {
+          controller.setView({ yaw: drag.view.yaw + (event.clientX - drag.x) * 0.2,
+            pitch: drag.view.pitch - (event.clientY - drag.y) * 0.2 });
+        } else if (!drag.orbit) controller.focus(drag.focus + Math.round((drag.x - event.clientX) / 28));
+      }
     } else if (event.pointerType !== 'touch') {
       const index = pointedIndex(event);
       canvas.style.cursor = index === undefined ? 'grab' : 'pointer';
@@ -289,7 +302,7 @@ export function createThreePrismDeck<T>(
   }
 
   function pointerUp(event: PointerEvent): void {
-    const select = drag?.id === event.pointerId && !drag.moved && !pinch;
+    const select = drag?.id === event.pointerId && !drag.moved && !drag.orbit && !pinch;
     pointers.delete(event.pointerId);
     if (drag?.id === event.pointerId) drag = null;
     if (!pointers.size) pinch = null;
@@ -325,6 +338,18 @@ export function createThreePrismDeck<T>(
 
   function keyDown(event: KeyboardEvent): void {
     const state = controller.getSnapshot();
+    if (event.altKey) {
+      if (options.cameraControls === false || renderer.xr.isPresenting) return;
+      switch (event.key) {
+        case 'ArrowRight': controller.setView({ yaw: state.view.yaw + 5 }); break;
+        case 'ArrowLeft': controller.setView({ yaw: state.view.yaw - 5 }); break;
+        case 'ArrowUp': controller.setView({ pitch: state.view.pitch + 5 }); break;
+        case 'ArrowDown': controller.setView({ pitch: state.view.pitch - 5 }); break;
+        default: return;
+      }
+      event.preventDefault();
+      return;
+    }
     switch (event.key) {
       case 'ArrowRight': case 'ArrowDown': controller.move(1); break;
       case 'ArrowLeft': case 'ArrowUp': controller.move(-1); break;
@@ -336,9 +361,16 @@ export function createThreePrismDeck<T>(
       case 'Escape': controller.dismiss(); break;
       case '+': case '=': controller.setZoom(state.zoom - 0.12); break;
       case '-': case '_': controller.setZoom(state.zoom + 0.12); break;
+      case '0':
+        if (options.cameraControls === false || renderer.xr.isPresenting) return;
+        controller.resetView(); break;
       default: return;
     }
     event.preventDefault();
+  }
+
+  function contextMenu(event: MouseEvent): void {
+    if (options.cameraControls !== false && !renderer.xr.isPresenting) event.preventDefault();
   }
 
   function sessionStart(): void {
@@ -379,6 +411,7 @@ export function createThreePrismDeck<T>(
   canvas.addEventListener('pointercancel', pointerCancel);
   canvas.addEventListener('wheel', wheel, { passive: false });
   canvas.addEventListener('keydown', keyDown);
+  canvas.addEventListener('contextmenu', contextMenu);
   renderer.xr.addEventListener('sessionstart', sessionStart);
   renderer.xr.addEventListener('sessionend', sessionEnd);
   const unsubscribe = controller.subscribe(synchronize);
@@ -409,6 +442,7 @@ export function createThreePrismDeck<T>(
       canvas.removeEventListener('pointercancel', pointerCancel);
       canvas.removeEventListener('wheel', wheel);
       canvas.removeEventListener('keydown', keyDown);
+      canvas.removeEventListener('contextmenu', contextMenu);
       for (const pane of panes.values()) release(pane);
       panes.clear();
       pointers.clear();

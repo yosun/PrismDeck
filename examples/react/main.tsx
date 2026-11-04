@@ -40,6 +40,7 @@ function App() {
   const [layout, setLayout] = useState<Layout | undefined>();
   const [prismLines, setPrismLines] = useState<boolean | undefined>();
   const [timelineRails, setTimelineRails] = useState<boolean | undefined>();
+  const [cameraControls, setCameraControls] = useState(true);
   const [selectionMode, setSelectionMode] = useState<SelectionMode | undefined>();
   const [status, setStatus] = useState('Select a pane to bring it into view.');
   const deck = useRef<PrismDeckInstance<Slide> | null>(null);
@@ -108,10 +109,11 @@ function App() {
               <label>Layout <select value={resolvedLayout} onChange={(event) => setLayout(event.target.value as Layout)}><option value="prism">Prism</option><option value="wallet">Wallet</option></select></label>
               <label><input type="checkbox" checked={prismLines ?? presets[variant].prismLines} disabled={wallet} title={wallet ? 'Available in Prism layout' : undefined} onChange={(event) => setPrismLines(event.target.checked)} /> Prism lines</label>
               <label><input type="checkbox" checked={timelineRails ?? presets[variant].timelineRails} disabled={wallet} title={wallet ? 'Available in Prism layout' : undefined} onChange={(event) => setTimelineRails(event.target.checked)} /> Timeline rails</label>
+              <label><input type="checkbox" title="Show camera controls and enable angle gestures and shortcuts" checked={cameraControls} onChange={(event) => setCameraControls(event.target.checked)} /> Angle controls</label>
               <label className="selection-mode-label">Selection <select value={selectionMode ?? presets[variant].selectionMode} onChange={(event) => setSelectionMode(event.target.value as SelectionMode)}><option value="slide-out">Slide-out</option><option value="modal">Modal</option><option value="none">App-defined</option></select></label>
             </div>
           </div>
-          <div className="deck-stage"><div className="stage-label"><span className="live-dot" />{wallet ? 'WALLET WILDCARD' : 'LIVE PRISM'}<span className="stage-hint">Drag · Scroll · Pinch</span></div>{wallet && <p className="wallet-note">A little room for a new perspective.</p>}<div className="react-deck-host">
+          <div className="deck-stage"><div className="stage-label"><span className="live-dot" />{wallet ? 'WALLET WILDCARD' : 'LIVE PRISM'}<span className="stage-hint">{cameraControls ? 'Shift-drag to orbit · Drag to browse' : 'Drag to browse · Scroll or pinch to zoom'}</span></div>{wallet && <p className="wallet-note">A little room for a new perspective.</p>}<div className="react-deck-host">
             <PrismDeck
               items={items}
               getKey={getKey}
@@ -124,6 +126,7 @@ function App() {
               selectionMode={selectionMode}
               prismLines={prismLines}
               timelineRails={timelineRails}
+              cameraControls={cameraControls}
               onReady={handleReady}
               onFocus={handleFocus}
               onSelect={handleSelect}
@@ -136,7 +139,7 @@ function App() {
           <div className="selection-bar"><div className="focus-info"><span className="focus-number">{String(focused.index + 1).padStart(3, '0')}</span><div><p className="eyebrow">FORM / TONE / POSSIBILITY</p><h3>{focused.title}</h3></div></div><div className="selection-actions">{wallet && <button className="secondary-button" onClick={drawCard}>Draw a card <span aria-hidden="true">⤨</span></button>}<button className="primary-button" onClick={viewPane}>View pane <span aria-hidden="true">↗</span></button></div></div>
           <p className="selection-status" role="status">{status}</p>
         </section>
-        <section className="below-gallery" aria-label="Navigation help"><div className="input-help"><span className="keycap">←</span><span className="keycap">→</span><span>Navigate</span><span className="keycap">+ / −</span><span>Density</span><span className="keycap">↵</span><span>Select</span></div><p>{Math.min(focus + 1, count).toLocaleString()} / {count.toLocaleString()} · 40 preview panes maximum</p></section>
+        <section className="below-gallery" aria-label="Navigation help"><div className="input-help"><span className="keycap">←</span><span className="keycap">→</span><span>Navigate</span><span className="keycap">+ / −</span><span>Density</span><span className="keycap">↵</span><span>Select</span>{cameraControls && <><span className="keycap">View angle</span><span>Rotate · Reset</span></>}</div><p>{Math.min(focus + 1, count).toLocaleString()} / {count.toLocaleString()} · 40 preview panes maximum</p></section>
         <section className="library-note"><div><p className="eyebrow">RENDER ANY REACT CONTENT</p><p>One widget. Three perspectives.<br />Mix the options to make it your own.</p></div><a className="text-button" href="https://github.com/yosun/PrismDeck/tree/main/examples/react">Read the example source ↗</a></section>
       </main>
       <footer><span>PrismDeck <span className="footer-dot">·</span> MIT licensed</span><span>React binding · No Three.js or XR imports</span></footer>

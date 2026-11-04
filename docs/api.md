@@ -31,8 +31,10 @@ Core does not require a DOM, React, Three.js, or XR.
 | `adapter` | Optional `{ getKey, getPosition?, getLabel? }` |
 | `initialFocus` | Initial index, rounded and clamped; defaults to `0` |
 | `initialZoom` | Initial zoom in `0…1`; defaults to `0` |
+| `initialView` | Optional signed view controls `{ yaw?: number, pitch?: number }`; defaults to `{ yaw: 0, pitch: 0 }` |
 | `onFocus` | `(item: T, orderedIndex: number) => void` |
 | `onSelect` | `(item: T, orderedIndex: number) => void` |
+| `onViewChange` | `(view: ViewAngle) => void`; observes camera angle changes |
 | `axis` | Optional `{ label?: string, unit?: string }` metadata |
 
 Keys must be unique strings or finite numbers. Key resolution uses `getKey`, then
@@ -60,13 +62,18 @@ is the key converted to text.
 | `select(index?)` | Focuses and selects a pane; defaults to current focus |
 | `dismiss()` | Clears selection |
 | `setZoom(amount)` | Clamps zoom to `0…1`; ignores non-finite values |
+| `setView({ yaw?, pitch? })` | Sets signed view controls; clamps yaw to `-60…60`, pitch to `-45…45`; omitted components retain their current value; ignores non-finite input |
+| `resetView()` | Restores `{ yaw: 0, pitch: 0 }` |
 | `setItems(items)` | Replaces items through `configure` |
 | `configure(partialOptions)` | Updates content, adapters, metadata, or callbacks |
 | `subscribe(listener)` | Registers `() => void`; returns an unsubscribe function |
 | `dispose()` | Stops updates and releases subscriptions |
 
-Snapshot fields are `{ focus, zoom, selectedKey, count, revision }`. An empty deck
-has `focus: -1`, `count: 0`, and `selectedKey: null`. `zoom: 0` is the close view;
+Snapshot fields are `{ focus, zoom, view, selectedKey, count, revision }`. `view`
+is an immutable `{ yaw, pitch }` pair of signed view controls centered on the
+default camera at `0`. They are not absolute Euler angles. The prism maps the
+full control ranges into safe front-facing azimuth and elevation at the current
+zoom, so all slider travel remains useful. An empty deck has `focus: -1`, `count: 0`, and `selectedKey: null`. `zoom: 0` is the close view;
 `zoom: 1` is the compact overview. `revision` increases when state is published.
 Subscribers read the current state with `getSnapshot()`.
 
@@ -78,12 +85,14 @@ does not trigger `onFocus`; read `getSnapshot()` to initialize custom controls.
 Collection updates retain focus by key when possible, otherwise clamp the old
 index. Selection is retained only if its key still exists. Keys and positions are
 validated before configuration is committed: an invalid update throws while
-preserving the previous controller state. `initialFocus` and `initialZoom` apply
-at creation; use navigation methods for later changes.
+preserving the previous controller state. `initialFocus`, `initialZoom`, and
+`initialView` apply at creation; use `setView` or `resetView` for later camera
+changes. Camera angle is independent of collection focus,
+selection, zoom, and presentation presets.
 
 ### Geometry
 
-`getPrismGeometry({ count, focus, zoom, width, height, paneWidth?, paneHeight?, positions? })`
+`getPrismGeometry({ count, focus, zoom, view?, width, height, paneWidth?, paneHeight?, positions? })`
 returns:
 
 | Field | Meaning |
@@ -98,6 +107,8 @@ Viewport width and height use one consistent unit, normally CSS pixels.
 The cross-section lies in YZ, and panes are ordered along X. Explicit `positions`
 must be sorted, finite, and match `count`; gaps are normalized by the smallest
 positive gap. Geometry does not allocate browser or renderer resources.
+The optional `view` applies the controller's camera angle to the geometry. Feed
+the same geometry to panes and guide lines so their corners remain aligned.
 
 `visibleIndices(count, focus, maxVisible = 40, zoom = 0)` returns bounded ordered
 indices. Close views use a contiguous focus window; overviews sample the full
@@ -108,7 +119,7 @@ collection while retaining focus and its nearest neighbors.
 
 Exported types include `PrismKey`, `PrismVector3`, `PrismAxis`, `PrismAdapter<T>`,
 `PrismSnapshot`, `DeckControllerOptions<T>`, `DeckController<T>`,
-`PrismGeometryOptions`, `PrismCamera`, and `PrismGeometry`. Naming aliases include
+`PrismGeometryOptions`, `PrismCamera`, `PrismGeometry`, and `ViewAngle`. Naming aliases include
 `Axis`, `DeckSnapshot`, `DeckOptions<T>`, `PrismDeckSnapshot`, and
 `PrismDeckController<T>`.
 
@@ -136,6 +147,8 @@ import { createPrismDeck, PRISMDECK_PRESETS, resolvePresentationOptions } from '
 | `onActivate(item, index)` | Optional second activation of the already selected pane |
 | `maxVisible` | Maximum preview panes; defaults to `40` |
 | `controls` | Built-in keyboard-accessible toolbar; defaults to `true` |
+| `cameraControls` | Built-in **View angle** panel with sliders, drag mode, and reset; defaults to `true` |
+| `view` | Optional signed `{ yaw?, pitch? }` controls; applies partial view state through creation or `update` |
 | `label` | Accessible widget label; defaults to `'PrismDeck'` |
 | `className` | Additional root CSS class |
 | `onDismiss()` | Optional callback when the built-in selection presentation closes |
@@ -219,6 +232,40 @@ Invalid key/position updates preserve the previous widget. A pane's application
 cleanup should release resources it owns; the library does not revoke your
 object URLs or cancel your subscriptions automatically.
 
+### Camera angle
+
+Every presentation preset uses the same controller camera state. Open **View
+angle** (**Angle** on small screens) for the horizontal (yaw) and vertical (pitch)
+sliders, a **Rotate**
+drag toggle, and **Reset view**. The panel's sliders support keyboard and touch.
+Enable **Rotate** for one-finger rotation; turn it off for ordinary sequence
+browsing. Shift-drag or right-drag rotates directly with a mouse. Alt + Arrow
+keys adjust the angle; `0` restores the default view. Wheel and pinch continue to
+control density.
+
+```ts
+const deck = createPrismDeck(mount, {
+  items, getKey, renderPane,
+  initialView: { yaw: 15, pitch: -5 },
+  onViewChange: ({ yaw, pitch }) => updateAngleDisplay(yaw, pitch),
+});
+deck.controller.setView({ pitch: 10 }); // Keep the current yaw.
+deck.update({ view: { yaw: -15 } });
+deck.controller.resetView();
+deck.update({ cameraControls: false });
+```
+
+`cameraControls: false` hides the built-in camera controls and disables angle
+gestures and keyboard shortcuts. The controller remains available for custom UI. `controls` configures the navigation toolbar
+separately. Neither option changes the current angle. `initialView` applies only
+at creation. Use `view`, `controller.setView`, or `controller.resetView` later.
+
+Focus, zoom, layout changes, and switching Versions A/B/C retain the current
+angle. Version A's prism boundaries and rails use the same camera as its panes;
+Version C rotates the wallet fan and pocket together. Selection presents a
+readable pane while retaining the collection's angle for the return to browsing.
+The camera adds no renderer dependencies or image resources.
+
 ### Theme
 
 `theme: 'system'` follows the operating system's color preference, including live
@@ -260,8 +307,10 @@ import { PrismDeck, Pane, usePrismDeck } from '@prismdeck/react';
 
 `PrismDeck<T>` accepts the DOM options with `renderPane(item, index): ReactNode`
 and optional `renderSelection(item, index): ReactNode`. This includes `variant`,
-`layout`, `selectionMode`, `prismLines`, `timelineRails`, `theme`, and `onActivate`. These props can
-change without remounting the widget.
+`layout`, `selectionMode`, `prismLines`, `timelineRails`, `theme`, `cameraControls`,
+`view`, `onViewChange`, and `onActivate`. These props can change without remounting
+the widget. `initialView`, like `initialFocus` and `initialZoom`, sets the initial
+state only.
 It also accepts `style`, `id`, and `onReady(instance)`. `className` and `style`
 apply to the React mount. React content is portaled into the bounded visible
 panes and, when supplied, the single selection view; offscreen content unmounts,

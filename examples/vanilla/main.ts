@@ -19,6 +19,7 @@ const sequence = element<HTMLInputElement>('sequence');
 const collectionSize = element<HTMLSelectElement>('collection-size');
 const prismLines = element<HTMLInputElement>('prism-lines');
 const timelineRails = element<HTMLInputElement>('timeline-rails');
+const cameraControls = element<HTMLInputElement>('camera-controls');
 const selectionMode = element<HTMLSelectElement>('selection-mode');
 const layout = element<HTMLSelectElement>('layout');
 const requestedVariant = new URL(location.href).searchParams.get('variant');
@@ -168,6 +169,14 @@ layout.addEventListener('change', () => {
 });
 prismLines.addEventListener('change', () => deck.update({ prismLines: prismLines.checked }));
 timelineRails.addEventListener('change', () => deck.update({ timelineRails: timelineRails.checked }));
+cameraControls.addEventListener('change', () => {
+  deck.update({ cameraControls: cameraControls.checked });
+  element('camera-hint').textContent = cameraControls.checked
+    ? 'Shift-drag to orbit · Drag to browse'
+    : 'Drag to browse · Scroll or pinch to zoom';
+  element('camera-help-button').hidden = !cameraControls.checked;
+  element('camera-help-action').hidden = !cameraControls.checked;
+});
 selectionMode.addEventListener('change', () => {
   deck.update({ selectionMode: selectionMode.value as SelectionMode });
   describeSelection();
