@@ -1,6 +1,6 @@
 /** Renderer-independent state and geometry for ordered, parallel visual panes. */
-export { getWalletLayout } from './wallet.js';
-export type { WalletLayout, WalletLayoutOptions, WalletPaneLayout } from './wallet.js';
+export { getWalletLayout } from './wallet.ts';
+export type { WalletLayout, WalletLayoutOptions, WalletPaneLayout } from './wallet.ts';
 
 export type PrismKey = string | number;
 export type PrismVector3 = [number, number, number];
