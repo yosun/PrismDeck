@@ -35,7 +35,7 @@ const fixture = `<!doctype html><html><head><meta name="viewport" content="width
   window.renderDetail=item=>{window.stats.detailCreated++;const element=document.createElement('div');element.className='detail';element.textContent='Inspect '+item.label;return {element,dispose:()=>window.stats.detailDisposed++};};
   window.one=createPrismDeck(document.querySelector('#one'),{
     items:window.initialItems,getKey:item=>item.id,adapter:{getKey:item=>item.id,getLabel:item=>item.label},
-    variant:'C',initialFocus:32,maxVisible:25,renderPane:window.renderPane,
+    variant:'C',layout:'wallet',prismLines:false,timelineRails:false,planeGrid:false,paneDrag:'none',initialFocus:32,maxVisible:25,renderPane:window.renderPane,
     onSelect:(item,index)=>window.selections.push({key:item.id,index}),onActivate:item=>window.activations.push(item.id),
   });
   </script></body></html>`;
@@ -188,7 +188,7 @@ try {
 
   // Layout is modular, and opting into C must not change either existing preset.
   for (const [variant, mode] of [['A','slide-out'],['B','modal']]) {
-    await page.evaluate((variant) => window.one.update({variant}), variant);
+    await page.evaluate((variant) => window.one.update({variant,layout:undefined}), variant);
     await frame();
     assert.equal(await page.locator('#one .prismdeck').getAttribute('data-prismdeck-layout'), 'prism', `${variant} keeps the prism layout`);
     assert.equal(await page.locator('#one .prismdeck').getAttribute('data-prismdeck-selection-mode'), mode);
@@ -200,7 +200,7 @@ try {
   await page.evaluate(() => window.one.update({variant:'C',layout:'prism'}));
   await frame();
   assert.equal(await page.locator('#one .prismdeck').getAttribute('data-prismdeck-layout'), 'prism', 'An explicit prism layout overrides C');
-  await page.evaluate(() => {window.one.update({layout:undefined,selectionMode:'modal',renderSelection:window.renderDetail});window.one.controller.select(32);});
+  await page.evaluate(() => {window.one.update({layout:'wallet',selectionMode:'modal',renderSelection:window.renderDetail});window.one.controller.select(32);});
   await page.waitForFunction(() => document.querySelector('#one .prismdeck-dialog')?.open);
   assert.equal(await page.locator('#one .prismdeck-pane-detail').textContent(), 'Inspect Idea 32', 'Wallet layout accepts an independent modal detail renderer');
   assert.equal(await page.evaluate(() => window.stats.detailCreated), 1);
@@ -297,43 +297,11 @@ try {
   assert.equal(disposed.created,disposed.disposed,'Every wallet content resource is disposed exactly once');
   assert.equal(disposed.detailCreated,disposed.detailDisposed,'Every optional detail resource is disposed exactly once');
 
-  // The shipped examples must share the C preset, including direct navigation links.
-  const demo=await context.newPage();
-  observe(demo);
-  await demo.goto(`${address}/?variant=C&theme=light`);
-  await demo.waitForSelector('.prismdeck[data-prismdeck-variant="C"][data-prismdeck-layout="wallet"] .prismdeck-pane');
-  assert.ok(await demo.locator('.prismdeck-pane').count()<=17,'The Vanilla C example mounts a bounded wallet');
-  assert.equal(await demo.locator('#prism-lines').isDisabled(),true,'Wallet hides unrelated prism-only guide controls');
-  await demo.locator('#draw-card').click();
-  try { await demo.waitForFunction(()=>window.deck.controller.getSnapshot().selectedKey!==null&&Number(window.deck.element.dataset.prismdeckSelectionProgress)===1); } catch(error) { throw new Error('Vanilla Draw did not open: '+JSON.stringify(await demo.evaluate(()=>({snapshot:window.deck.controller.getSnapshot(),data:{...window.deck.element.dataset},active:document.activeElement?.outerHTML.slice(0,200)}))),{cause:error}); }
-  assert.notEqual(await demo.evaluate(()=>window.deck.controller.getSnapshot().selectedKey),'study-0','The wildcard action draws a different card');
-  assert.match(await demo.locator('#selection-status').textContent(),/Your wildcard:/,'The wildcard action explains its result');
-  await demo.keyboard.press('Escape');
-  await demo.waitForFunction(()=>Number(window.deck.element.dataset.prismdeckSelectionProgress)===0);
-  await demo.locator('#version-a').click();
-  assert.equal(new URL(demo.url()).searchParams.get('variant'),'A','Switching variants updates the shareable URL');
-  await demo.locator('#version-c').click();
-  assert.equal(new URL(demo.url()).searchParams.get('variant'),'C','C can be shared directly after switching');
-  const reactAddress=await serve('react',1);
-  const react=await context.newPage();
-  observe(react);
-  await react.goto(`${reactAddress}/?variant=C&theme=dark`);
-  await react.waitForSelector('.prismdeck[data-prismdeck-variant="C"][data-prismdeck-layout="wallet"] .prismdeck-pane img');
-  assert.ok(await react.locator('.prismdeck-pane').count()<=17,'The React C example mounts a bounded wallet');
-  await react.getByRole('button',{name:/Draw a card/}).click();
-  await react.waitForFunction(()=>Number(document.querySelector('.prismdeck')?.dataset.prismdeckSelectionProgress)===1);
-  assert.notEqual(await react.locator('.prismdeck-selection-viewport .prismdeck-pane').getAttribute('data-prismdeck-key'),'study-0','The React wildcard action draws a different card');
-  await react.keyboard.press('Escape');
-  await react.waitForFunction(()=>Number(document.querySelector('.prismdeck')?.dataset.prismdeckSelectionProgress)===0);
-  await react.locator('.prismdeck').focus();
-  await react.keyboard.press('Enter');
-  await react.waitForFunction(()=>Number(document.querySelector('.prismdeck')?.dataset.prismdeckSelectionProgress)===1);
-  assert.ok(await react.locator('.prismdeck-selection-viewport img').count()>0,'React keeps its rendered card content when drawing it from the wallet');
-  await react.keyboard.press('Escape');
-  await react.waitForFunction(()=>Number(document.querySelector('.prismdeck')?.dataset.prismdeckSelectionProgress)===0);
-  assert.equal(requests.some(url=>/packages\/three|node_modules.*three|three\.js|\/xr[.\/]/.test(url)),false,'Wallet and both shipped C examples load no Three or XR');
-  assert.deepEqual(errors,[],'The wallet and examples produce no browser errors');
-  console.log('Wallet browser checks passed: bounded ordered fan, real focused/adjacent hits, same-node draw and return, no image reloads, keyboard/wheel/native pinch, independent presets/layout/modal/none, selected updates, neutral themes, mobile endpoints and density, reduced motion, resource cleanup, Vanilla/React C, zero Three/XR.');
+  // The wallet remains available only as an explicit legacy layout. Version C
+  // is covered by plane-browser.mjs, including both shipped examples.
+  assert.equal(requests.some(url=>/packages\/three|node_modules.*three|three\.js|\/xr[.\/]/.test(url)),false,'The explicit wallet layout loads no Three or XR');
+  assert.deepEqual(errors,[],'The explicit wallet layout produces no browser errors');
+  console.log('Wallet browser checks passed: bounded ordered fan, real focused/adjacent hits, same-node draw and return, no image reloads, keyboard/wheel/native pinch, independent presets/layout/modal/none, selected updates, neutral themes, mobile endpoints and density, reduced motion, resource cleanup, explicit legacy layout, zero Three/XR.');
 } finally {
   await browser?.close();
   for (const server of servers) server.kill('SIGTERM');

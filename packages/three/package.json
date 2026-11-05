@@ -1,6 +1,6 @@
 {
   "name": "@prismdeck/three",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "Optional Three.js and WebXR renderer for PrismDeck",
   "type": "module",
   "license": "MIT",
@@ -33,7 +33,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@prismdeck/core": "0.4.2"
+    "@prismdeck/core": "0.5.0"
   },
   "peerDependencies": {
     "three": ">=0.170.0 <1"

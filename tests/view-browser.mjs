@@ -95,7 +95,6 @@ try {
     assert.deepEqual(invariant(await state()),invariant(before),`${variant}: camera adjustment retains focus, zoom, and selection`);
     assert.deepEqual(await resources(),beforeResources,`${variant}: rotating creates and disposes no pane content`);
     assert.notDeepEqual((await poses()).panes,baseline.panes,`${variant}: camera changes actually rotate projected panes`);
-    if (variant==='C') assert.notDeepEqual((await poses()).pocket,baseline.pocket,'Wallet pocket rotates with its cards');
     assert.deepEqual(await page.evaluate(()=>JSON.parse(window.one.element.dataset.prismdeckView)),{yaw:28,pitch:-17},`${variant}: rendered view diagnostic matches public state`);
 
     await page.locator('#one button[aria-label="Reset view"]').click(); await frames();
@@ -157,7 +156,8 @@ try {
       return {connected:pane.isConnected,skew:[matrix.m12,matrix.m13,matrix.m21,matrix.m23],parent:pane.parentElement.className};
     });
     assert.equal(reading.connected,true,`${variant}: selected pane remains the original node`);
-    assert.ok(reading.skew.every(value=>Math.abs(value)<.0001),`${variant}: reading surface faces the user after camera changes: ${JSON.stringify(reading)}`);
+    if(variant==='C') assert.ok(reading.skew.every(Number.isFinite)&&reading.skew.some(value=>Math.abs(value)>.0001),`C: the selected pane keeps its oblique extended-plane perspective: ${JSON.stringify(reading)}`);
+    else assert.ok(reading.skew.every(value=>Math.abs(value)<.0001),`${variant}: reading surface faces the user after camera changes: ${JSON.stringify(reading)}`);
     await page.evaluate(()=>window.one.controller.dismiss()); await settled(false); await frames();
     assert.deepEqual((await state()).view,{yaw:-38,pitch:-21},`${variant}: returning preserves the viewing angle`);
     assert.equal(await page.evaluate(()=>window.selectedOriginal.parentElement===window.one.element.querySelector('.prismdeck-viewport .prismdeck-stage')),true,`${variant}: returning puts the same pane back in the collection`);
@@ -276,6 +276,8 @@ try {
     assert.deepEqual(await touch.evaluate(()=>window.one.controller.getSnapshot().view),{yaw:0,pitch:0},`${variant}: phone reset returns the default camera`);
     assert.equal(await touch.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`${variant}: expanded angle controls add no horizontal overflow`);
   }
+  // Legacy wallet camera fitting is explicit; C now uses the snap-plane prism.
+  await touch.evaluate(()=>window.one.update({layout:'wallet'}));
   for (const yaw of [-60,0,60]) for (const pitch of [-45,0,45]) for (const zoom of [0,1]) for (const focus of [0,5000,9999]) {
     await touch.evaluate(async({yaw,pitch,zoom,focus})=>{
       window.one.controller.setView({yaw,pitch});window.one.controller.setZoom(zoom);window.one.controller.focus(focus);

@@ -1,9 +1,9 @@
 # PrismDeck
 
 A lightweight, open-source 3D navigation component for large collections of
-ordered images and visual content. Browse a volume of parallel panes or a wallet
-of fanned cards, focus one, and bring it into view with a seamless slide-out or a
-modal.
+ordered images and visual content. Browse a volume of parallel panes, focus one,
+and bring it into view with a seamless slide-out, a modal, or an extended snap
+grid on the pane’s own plane.
 
 Use it for slide decks, photo archives, PDF pages, video frames, version histories,
 medical slices, scientific datasets, or spatial galleries. An axis can mean
@@ -11,8 +11,8 @@ sequence, depth, time, version, or any numerical position.
 
 - **Small default path:** no third-party runtime dependencies in core or DOM.
 - **Bounded rendering:** thousands of items, up to 40 preview panes by default.
-- **Modular presentation:** choose prism or wallet layout, seamless slide-out or
-  modal, with independent prism lines and timeline rails.
+- **Modular presentation:** seamless slide-out, modal, or snap grid, with
+  independent prism lines, timeline rails, dragging, and snapping.
 - **Content stays yours:** render DOM or React content; supply your own actions.
 - **Progressive spatial support:** Three.js and XR are separate, optional imports.
 - **Built for input:** keyboard, pointer, touch, pinch, zoom, and camera angle controls.
@@ -37,11 +37,11 @@ npm run dev
 Open the local Vite URL. The demo generates 1,000 slides locally and can switch to
 10,000 items. No account, image service, API key, or external image host is needed.
 The default is **Version A**. Try **Version B** for modal selection or
-**[Version C — Wallet wildcard](https://yosun.github.io/PrismDeck/?variant=C)**
-for a fan of cards tucked into a pocket. Draw an unexpected card, read it, and
-return it to its place. Share a demo URL ending in `?variant=A`, `?variant=B`, or
-`?variant=C`. The layout, selection, and guide controls let you mix options
-independently. **Day** uses white and neutral grays;
+**[Version C — Snap grid](https://yosun.github.io/PrismDeck/?variant=C)**
+to extend a selected pane into a grid on its own plane. Drag in any direction and
+release to snap, with the prism still in view. Share a demo URL ending in `?variant=A`, `?variant=B`, or
+`?variant=C`. Selection, guides, plane grid, drag direction, grid size, and
+snapping are independent options. **Day** uses white and neutral grays;
 **Night** uses dark neutral surfaces. The demo follows your system preference until
 you choose a mode, remembers that choice locally, and supports shareable
 `?theme=light` or `?theme=dark` URLs. Run `npm run dev:react` for the React example.
@@ -83,12 +83,12 @@ The standalone browser bundle needs no build tool or framework:
 ```
 
 For production, download and self-host the browser bundle and stylesheet from a
-[pinned release](https://github.com/yosun/PrismDeck/releases/tag/v0.4.2). GitHub
+[pinned release](https://github.com/yosun/PrismDeck/releases/tag/v0.5.0). GitHub
 Pages follows the current demo build. The bundle contains the DOM widget and core;
 it does not include React, Three.js, or XR. All three presets use
-the same bounded content window; the wallet adds no image resources or renderer
-dependency. The standalone build is approximately 11.9 KB of gzipped JavaScript
-plus a 2.4 KB gzipped stylesheet.
+the same bounded content window; the snap grid adds no image resources or
+renderer dependency. The standalone build is approximately 14.4 KB of gzipped JavaScript
+plus a 2.8 KB gzipped stylesheet.
 
 ## Packages
 
@@ -100,7 +100,7 @@ plus a 2.4 KB gzipped stylesheet.
 | `@prismdeck/three` | Optional WebGL image renderer | Core; Three.js peer |
 | `@prismdeck/three/xr` | Explicit, lazy XR helpers | Optional Three.js renderer |
 
-The packages are prepared as version **0.4.2**. This repository does not imply
+The packages are prepared as version **0.5.0**. This repository does not imply
 that the names are available from the npm registry. Build local distributable
 tarballs with:
 
@@ -112,14 +112,14 @@ Install the generated tarballs in your application. Install core first, then the
 renderer or binding you use:
 
 ```sh
-npm install /path/to/PrismDeck/.artifacts/prismdeck-core-0.4.2.tgz
-npm install /path/to/PrismDeck/.artifacts/prismdeck-dom-0.4.2.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-core-0.5.0.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-dom-0.5.0.tgz
 # For React applications:
 npm install react react-dom
-npm install /path/to/PrismDeck/.artifacts/prismdeck-react-0.4.2.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-react-0.5.0.tgz
 # For optional Three.js rendering:
 npm install three
-npm install /path/to/PrismDeck/.artifacts/prismdeck-three-0.4.2.tgz
+npm install /path/to/PrismDeck/.artifacts/prismdeck-three-0.5.0.tgz
 ```
 
 ## React
@@ -201,41 +201,50 @@ content. The local demo images are 16:9 to fill the default pane exactly.
 **Version B — Modal** opens the selected pane in a modal and hides prism lines
 and timeline rails. Escape, the backdrop, or the close button returns to browsing.
 
-**Version C — Wallet wildcard** holds the collection in a pocket with a fan of
-cards. Selecting a pane lifts that original card into a reading view, with its
-place retained in the wallet. Return it to continue browsing. It uses the same
-ordered content, input controls, zoom, and bounded rendering budget as the prism.
-The demo's **Draw a card** action explores a different random index without
-reordering or duplicating the collection. Day and Night remain neutral.
+**Version C — Snap grid** extends the selected original pane into a grid on its
+own plane. The prism volume, vanishing-point boundaries, and timeline rails stay
+visible. Drag the pane left, right, up, down, or diagonally, then release to snap
+to the nearest grid intersection. Dragging follows the pane's projected plane,
+including at oblique camera angles; it does not move through the ordered axis.
+The grid and content use the same geometry, with no additional image resources.
+Day and Night remain neutral.
 
 ```ts
 const deck = createPrismDeck(mount, {
   items, getKey, renderPane,
-  variant: 'C', // Wallet layout, slide-out selection, no prism guides.
+  variant: 'C', // Prism, slide-out, guides, plane grid, free dragging, and snap.
 });
 
-// An application-owned discovery action; collection order stays intact.
-function drawCard() {
-  const { focus, count } = deck.controller.getSnapshot();
-  if (!count) return;
-  const next = count < 2 ? 0 : (focus + 1 + Math.floor(Math.random() * (count - 1))) % count;
-  deck.controller.dismiss();
-  deck.controller.focus(next);
-  deck.controller.select();
-  deck.element.focus({ preventScroll: true }); // Keyboard navigation and Escape stay in the deck.
-}
+// Selection is application-controlled. The demos open C's focused pane for you.
+deck.controller.select();
+
+// Every interaction option can be used with another preset as well.
+deck.update({
+  planeGrid: true,
+  paneDrag: 'free', // 'free' | 'horizontal' | 'vertical' | 'none'
+  snapToGrid: true,
+  gridSize: 80, // Spacing in the pane's world coordinates.
+});
 ```
 
 | Preset | Layout | Selection | Prism lines | Timeline rails |
 | --- | --- | --- | --- | --- |
 | `variant: 'A'` (default) | `'prism'` | `'slide-out'` | `true` | `true` |
 | `variant: 'B'` | `'prism'` | `'modal'` | `false` | `false` |
-| `variant: 'C'` | `'wallet'` | `'slide-out'` | `false` | `false` |
+| `variant: 'C'` | `'prism'` | `'slide-out'` | `true` | `true` |
+
+| Preset | `planeGrid` | `paneDrag` | `snapToGrid` | `gridSize` |
+| --- | --- | --- | --- | --- |
+| A / B | `false` | `'none'` | `true` | `80` |
+| C | `true` | `'free'` | `true` | `80` |
+
+Snapping stays inert while pane dragging is disabled. Enable dragging on A or B
+without changing the other preset features.
 
 Versions are convenience presets on the same component. Each explicit option
 independently overrides its preset, so a modal can have rails or a slide-out can
-hide the prism outline. `layout` independently chooses the prism volume or wallet
-fan; prism lines and timeline rails apply only to the prism layout:
+hide the prism outline. The plane grid, drag direction, snapping, and grid size
+can also be configured independently:
 
 ```ts
 const deck = createPrismDeck(mount, {
@@ -246,7 +255,7 @@ const deck = createPrismDeck(mount, {
   prismLines: true,
   timelineRails: true,
   // selectionMode: 'slide-out' | 'modal' | 'none',
-  // layout: 'prism' | 'wallet',
+  // planeGrid: true, paneDrag: 'free', snapToGrid: true, gridSize: 80,
 });
 
 // Change individual options without rebuilding the widget.
@@ -266,6 +275,38 @@ such as a full-resolution image. DOM uses the same return types as `renderPane`;
 React accepts React content. This optional detail renderer creates at most one
 additional content resource and disposes it when selection closes or changes.
 
+## Extended pane workspace
+
+`planeGrid` extends the selected pane's own plane while preserving the prism
+behind it. `paneDrag` chooses free motion in both dimensions, one-axis motion, or
+no dragging. `snapToGrid` controls release behavior independently of grid
+visibility, and `gridSize` controls the spacing. These options apply to
+`selectionMode: 'slide-out'`; modal and app-defined selection keep their own
+presentation. Shift-drag, right-drag, or **Rotate** still changes the camera.
+
+With the workspace focused, Arrow keys move the pane by one grid spacing. Hold
+Shift for four spacings; **Home** or **Center pane** restores the workspace origin.
+Axis constraints apply to keyboard moves as well. Escape returns to browsing.
+
+Offsets belong to stable pane keys. Returning to the deck restores each pane to
+its original ordered position. Selecting it again restores its workspace offset;
+changing focus, density, theme, or viewing angle does not erase it. An offset is
+removed when its item leaves the collection or the widget is disposed.
+`onPaneMove` fires after a user commits a placement with a drag, keyboard move, or
+**Center pane**, rather than on every pointer move.
+Programmatic offset updates do not fire this interaction callback.
+
+```ts
+// Keys are content identity, not an ordered index.
+const offset = deck.getPaneOffset('slide-42'); // A fresh { x, y } object; zero by default.
+deck.setPaneOffset('slide-42', { x: 160, y: -80 });
+deck.setPaneOffset('slide-42', { x: 0, y: 0 }); // Restore its workspace origin.
+```
+
+`setPaneOffset` preserves the exact finite coordinates supplied; it does not
+round to the grid or invoke `onPaneMove`. Unknown keys and nonfinite updates are
+ignored. This lets applications save, restore, or clear pane placements.
+
 ## Widget options
 
 | Option | Meaning |
@@ -277,11 +318,16 @@ additional content resource and disposes it when selection closes or changes.
 | `onSelect(item, index)` | Called when a pane is selected |
 | `onActivate(item, index)` | Optional action when the selected pane is activated again |
 | `variant` | `'A'` (default), `'B'`, or `'C'`; selects presentation defaults |
-| `layout` | `'prism'` or `'wallet'`; overrides the preset layout |
+| `layout` | `'prism'` for all presets; `'wallet'` remains an explicit compatibility layout |
 | `theme` | `'system'` (default), `'light'` for Day, or `'dark'` for Night; independent of the variant |
 | `selectionMode` | `'slide-out'`, `'modal'`, or `'none'`; overrides the preset |
 | `prismLines` | Show the vanishing-point rectangular prism outline in prism layout; overrides the preset |
 | `timelineRails` | Show rails along the ordered axis in prism layout; overrides the preset |
+| `planeGrid` | Show an extended grid in the selected pane's plane; enabled by Version C |
+| `paneDrag` | `'free'`, `'horizontal'`, `'vertical'`, or `'none'`; constrain dragging within the selected pane's plane |
+| `snapToGrid` | Snap a dragged pane to grid intersections on release; independent of grid visibility |
+| `gridSize` | Grid spacing in pane world units; finite values from `8` to `1024`, default `80` |
+| `onPaneMove(item, index, offset)` | Observe a committed user placement; receives the pane's `{ x, y }` offset in its plane |
 | `transitionDuration` | Approximate slide-out settling time in milliseconds; defaults to `700`, or `0` for instant |
 | `renderSelection(item, index)` | Optional lazy detail content; defaults to reusing the selected pane |
 | `onDismiss()` | Called when the built-in selection view is dismissed |
@@ -316,8 +362,8 @@ createPrismDeck(mount, {
 });
 ```
 
-The returned instance has `element`, `controller`, `update(options)`, and
-`dispose()`. Controller state can drive a custom toolbar, details panel, or a
+The returned instance has `element`, `controller`, `update(options)`,
+`getPaneOffset(key)`, `setPaneOffset(key, offset)`, and `dispose()`. Controller state can drive a custom toolbar, details panel, or a
 second renderer:
 
 ```ts
@@ -353,8 +399,8 @@ angles. The prism maps them into a safe viewing range at the current zoom.
 
 The view controls persist through zoom, focus, selection dismissal, and presentation
 or layout changes. A selected pane still faces the viewer in its reading view.
-Prism boundaries and timeline rails turn with their panes; the wallet fan and its
-pocket turn together. Neutral Day and Night modes are independent of the camera.
+Prism boundaries, timeline rails, and the extended pane grid share the viewing
+geometry. Neutral Day and Night modes are independent of the camera.
 
 ```ts
 const deck = createPrismDeck(mount, {
@@ -427,13 +473,14 @@ Focus the widget, then use:
 
 | Input | Action |
 | --- | --- |
-| Arrow keys | Move through the ordered panes |
-| Home / End | First / last pane |
+| Arrow keys | Move through the ordered panes; move the selected workspace pane when dragging is enabled |
+| Home / End | First / last pane; Home centers a selected workspace pane |
 | `+` / `-` | Change zoom and pane density |
 | Enter | Select the focused pane; activate it again for the optional app action |
 | Escape | Dismiss selection |
 | Pointer or touch | Focus and activate a pane |
-| Drag with **Rotate** off | Browse the ordered panes |
+| Drag with **Rotate** off | Browse the ordered panes; drag the selected pane in its plane when `paneDrag` is enabled |
+| Release a pane with `snapToGrid` on | Snap to the nearest grid intersection |
 | Drag with **Rotate** on | Change horizontal and vertical camera angles |
 | Shift-drag or right-drag | Orbit directly with a mouse |
 | Alt + Arrow keys | Adjust the viewing angle |
@@ -493,6 +540,7 @@ Dispose the spatial renderer when leaving that view.
 npm run build
 npm test
 npm run test:browser
+npm run test:plane-browser
 npm run pack
 ```
 

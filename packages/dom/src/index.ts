@@ -1,13 +1,14 @@
-import { createDeckController, getPrismGeometry, getWalletLayout, visibleIndices } from '@prismdeck/core';
-import type { PrismAdapter, PrismKey, PrismGeometry, PrismCamera, WalletPaneLayout, ViewAngle } from '@prismdeck/core';
+import { createDeckController, getPrismGeometry, getWalletLayout, visibleIndices, intersectPanePlane, snapPaneOffset } from '@prismdeck/core';
+import type { PrismAdapter, PrismKey, PrismGeometry, PrismCamera, WalletPaneLayout, ViewAngle, PaneOffset } from '@prismdeck/core';
 
 import { getWalletView } from './wallet-view.js';
-export type { ViewAngle } from '@prismdeck/core';
+export type { ViewAngle, PaneOffset } from '@prismdeck/core';
 import { createPrismGuides, drawPrismGuides } from './guides.js';
+import { createPlaneGrid } from './plane-grid.js';
 import { resolvePresentationOptions, resolveTheme } from './options.js';
 import type { PrismDeckPresentationOptions, PrismDeckTheme, PrismDeckLayout } from './options.js';
 export { PRISMDECK_PRESETS, resolvePresentationOptions } from './options.js';
-export type { PrismDeckVariant, PrismDeckSelectionMode, PrismDeckPresentationOptions, PrismDeckTheme, PrismDeckLayout } from './options.js';
+export type { PrismDeckVariant, PrismDeckSelectionMode, PrismDeckPresentationOptions, PrismDeckTheme, PrismDeckLayout, PrismDeckPaneDrag } from './options.js';
 
 let nextViewPanelId = 0;
 
@@ -20,6 +21,8 @@ export interface PrismDeckOptions<T> extends PrismDeckPresentationOptions {
   /** Set the shared viewing angle independently of the variant. */
   view?: Partial<ViewAngle>;
   onViewChange?: (view: ViewAngle) => void;
+  /** A pointer, keyboard, or Reset position action committed a pane-local move. */
+  onPaneMove?: (item: T, index: number, offset: PaneOffset) => void;
   /** Built-in angle toolbar, gestures, and shortcuts; controller methods always remain available. */
   cameraControls?: boolean;
   getKey?: (item: T) => PrismKey;
@@ -44,6 +47,9 @@ export interface PrismDeckInstance<T> {
   readonly element: HTMLElement;
   readonly controller: ReturnType<typeof createDeckController<T>>;
   update(options: Partial<PrismDeckOptions<T>>): void;
+  getPaneOffset(key: PrismKey): PaneOffset;
+  /** Set an exact pane-local position without emitting onPaneMove. */
+  setPaneOffset(key: PrismKey, offset: PaneOffset): void;
   dispose(): void;
 }
 interface MountedPane { element: HTMLElement; content: HTMLElement; dispose?: () => void; item: unknown; index: number }
@@ -131,23 +137,34 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
   selectionViewport.className = 'prismdeck-selection-viewport';
   const selectionStage = document.createElement('div'); selectionStage.className = 'prismdeck-stage';
   const selectionVolume = document.createElement('div'); selectionVolume.className = 'prismdeck-volume';
+  const planeGrid = createPlaneGrid();
+  const snapPreview = document.createElement('div'); snapPreview.className = 'prismdeck-plane-target'; snapPreview.hidden = true; snapPreview.setAttribute('aria-hidden', 'true');
+  selectionStage.append(planeGrid.element, snapPreview);
   selectionVolume.append(selectionStage); selectionViewport.append(selectionVolume);
   const back = button('Back to deck', '← Back to deck', dismiss);
   back.className = 'prismdeck-selection-back';
   const selectionLabel = document.createElement('div'); selectionLabel.className = 'prismdeck-selection-label';
-  presentation.append(selectionViewport, back, selectionLabel); element.append(presentation, viewPanel);
+  const planeTools = document.createElement('div'); planeTools.className = 'prismdeck-plane-tools'; planeTools.hidden = true;
+  const planeHint = document.createElement('span');
+  const resetPosition = button('Reset pane position', 'Center pane', () => { if (selected) commitPaneOffset({x: 0, y: 0}); });
+  planeTools.append(planeHint, resetPosition);
+  presentation.append(selectionViewport, back, selectionLabel, planeTools); element.append(presentation, viewPanel);
   presentation.addEventListener('click', event => {
-    if (event.target === presentation || event.target === selectionViewport) dismiss();
+    if (!suppressClick && !isPlaneWorkspace() && (event.target === presentation || event.target === selectionViewport)) dismiss();
   });
   viewport.addEventListener('click', event => {
     if (selected && selected.mode === 'slide-out' && !suppressClick) { event.preventDefault(); event.stopPropagation(); dismiss(); }
   }, true);
   const mounted = new Map<PrismKey, MountedPane>();
+  const paneOffsets = new Map<PrismKey, PaneOffset>();
+  let offsetItems = controller.getItems();
   let selected: { key: PrismKey; index: number; pane: MountedPane; mode: 'slide-out' | 'modal'; layout: PrismDeckLayout; indices: readonly number[];
     amount: number; focus: number; zoom: number; detail?: HTMLElement; disposeDetail?: () => void } | null = null;
   let dialog: HTMLDialogElement | null = null;
   const pointers = new Map<number, {x: number; y: number}>();
-  let drag: { id: number; x: number; y: number; focus: number; moved: boolean; view?: ViewAngle } | null = null;
+  let drag: { id: number; x: number; y: number; focus: number; moved: boolean; surface: HTMLElement; view?: ViewAngle;
+    plane?: { key: PrismKey; anchor: PaneOffset; offset: PaneOffset } } | null = null;
+  let activePlane: { camera: PrismCamera; planeX: number } | null = null;
   let pinch: { distance: number; zoom: number } | null = null;
   let suppressClick = false;
   let suppressTimer: ReturnType<typeof setTimeout> | undefined;
@@ -157,6 +174,48 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
   let viewZoom = controller.getSnapshot().zoom;
   let lastTime = 0;
   const motion = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+  function isPlaneWorkspace() { return appearance.layout === 'prism' && appearance.selectionMode === 'slide-out' && (appearance.planeGrid || appearance.paneDrag !== 'none'); }
+  function getPaneOffset(key: PrismKey): PaneOffset { return {...(paneOffsets.get(key) ?? {x: 0, y: 0})}; }
+  function storePaneOffset(key: PrismKey, offset: PaneOffset) {
+    if (!Number.isFinite(offset.x) || !Number.isFinite(offset.y)) return;
+    paneOffsets.set(key, {x: offset.x, y: offset.y}); schedule();
+  }
+  function setPaneOffset(key: PrismKey, offset: PaneOffset) {
+    if (disposed || !controller.getItems().some((_, index) => controller.getKey(index) === key)) return;
+    storePaneOffset(key, offset);
+  }
+  function commitPaneOffset(offset: PaneOffset) {
+    if (!selected || controller.getKey(selected.index) !== selected.key) return;
+    storePaneOffset(selected.key, offset);
+    options.onPaneMove?.(controller.getItems()[selected.index], selected.index, getPaneOffset(selected.key));
+  }
+  function pointerOnPlane(event: PointerEvent): PaneOffset | null {
+    if (!activePlane) return null;
+    const rect = selectionViewport.getBoundingClientRect();
+    return intersectPanePlane({x: event.clientX - rect.left, y: event.clientY - rect.top}, activePlane.camera, width, height, activePlane.planeX);
+  }
+  function constrainedSnap(offset: PaneOffset, start: PaneOffset): PaneOffset {
+    const snapped = appearance.snapToGrid ? snapPaneOffset(offset, appearance.gridSize) : offset;
+    return {x: appearance.paneDrag === 'vertical' ? start.x : snapped.x,
+      y: appearance.paneDrag === 'horizontal' ? start.y : snapped.y};
+  }
+  function cancelPaneDrag() {
+    if (!drag?.plane) return;
+    const previous = drag;
+    drag = null;
+    pointers.delete(previous.id);
+    if (controller.getItems().some((_, index) => controller.getKey(index) === previous.plane!.key)) storePaneOffset(previous.plane!.key, previous.plane!.offset);
+    if (previous.surface.hasPointerCapture(previous.id)) previous.surface.releasePointerCapture(previous.id);
+    element.classList.remove('is-plane-dragging'); snapPreview.hidden = true;
+  }
+  function prunePaneOffsets() {
+    const items = controller.getItems();
+    if (items === offsetItems) return;
+    offsetItems = items;
+    const keys = new Set(items.map((_, index) => controller.getKey(index)));
+    for (const key of paneOffsets.keys()) if (!keys.has(key)) paneOffsets.delete(key);
+    if (drag?.plane && !keys.has(drag.plane.key)) cancelPaneDrag();
+  }
   function button(label: string, text: string, action: () => void) {
     const node = document.createElement('button');
     node.type = 'button'; node.textContent = text; node.setAttribute('aria-label', label);
@@ -208,8 +267,15 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     if (controller.getSnapshot().selectedKey !== null) { controller.dismiss(); options.onDismiss?.(); }
     schedule();
   }
-  function browse(action: () => void) { if (selected) dismiss(); action(); }
+  function browse(action: () => void) {
+    const workspace = !!selected && isPlaneWorkspace();
+    if (selected && !workspace) dismiss();
+    action();
+    if (workspace && controller.getSnapshot().focus !== selected?.index) controller.select();
+  }
   function resetPresentation() {
+    cancelPaneDrag(); element.classList.remove('is-plane-dragging');
+    activePlane = null; planeGrid.element.hidden = snapPreview.hidden = planeTools.hidden = true;
     const restoreFocus = presentation.contains(document.activeElement) || !!dialog?.contains(document.activeElement);
     if (selected) {
       selected.disposeDetail?.(); selected.detail?.remove(); selected.pane.content.hidden = false;
@@ -261,35 +327,47 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
   }
   function cameraAtExtraction(geometry: PrismGeometry, index: number, amount: number): PrismCamera {
     const source = geometry.camera;
-    const azimuth = Math.atan2(-source.direction[2], source.direction[0]) * (1 - amount);
-    const elevation = Math.asin(-source.direction[1]) * (1 - amount);
+    const workspace = isPlaneWorkspace();
+    const orientation = workspace ? 1 : 1 - amount;
+    const azimuth = Math.atan2(-source.direction[2], source.direction[0]) * orientation;
+    const elevation = Math.asin(-source.direction[1]) * orientation;
     const direction: [number, number, number] = [Math.cos(azimuth) * Math.cos(elevation), -Math.sin(elevation), -Math.sin(azimuth) * Math.cos(elevation)];
     const right: [number, number, number] = [Math.sin(azimuth), 0, Math.cos(azimuth)];
     const up: [number, number, number] = [Math.cos(azimuth) * Math.sin(elevation), Math.cos(elevation), -Math.sin(azimuth) * Math.sin(elevation)];
     const at = geometry.positionAt(index), small = width < 600;
-    const visibleHeight = Math.max(1, Math.min(Math.max(1, height - 104), height * (small ? 0.48 : 0.62), width * (small ? 0.88 : 0.68) * geometry.paneHeight / geometry.paneWidth));
+    const visibleHeight = Math.max(1, Math.min(Math.max(1, height - 104), height * (workspace ? 0.42 : small ? 0.48 : 0.62), width * (workspace ? small ? 0.58 : 0.46 : small ? 0.88 : 0.68) * geometry.paneHeight / geometry.paneWidth));
     const depth = source.focalLength * geometry.paneHeight / visibleHeight;
-    const cx = small ? 0.5 : 0.59;
-    const cy = Math.max(visibleHeight / 2 + 12, Math.min(height * 0.55, height - 64 - visibleHeight / 2)) / height;
-    const end = [at[0] - depth, at[1] + (cy - 0.5) * height * depth / source.focalLength,
-      at[2] + geometry.paneWidth * 1.05 + (0.5 - cx) * width * depth / source.focalLength];
+    const cx = workspace || small ? 0.5 : 0.59;
+    const cy = Math.max(visibleHeight / 2 + 12, Math.min(height * (workspace ? 0.5 : 0.55), height - 64 - visibleHeight / 2)) / height;
+    const horizontal = (cx - 0.5) * width * depth / source.focalLength;
+    const vertical = (cy - 0.5) * height * depth / source.focalLength;
+    const center = [at[0], at[1], at[2] + (workspace ? 0 : geometry.paneWidth * 1.05)];
+    const end = workspace ? center.map((value, i) => value - direction[i] * depth - right[i] * horizontal + up[i] * vertical)
+      : [at[0] - depth, at[1] + vertical, at[2] + geometry.paneWidth * 1.05 - horizontal];
     return {position: source.position.map((value, i) => value + (end[i] - value) * amount) as [number, number, number], direction, right, up, focalLength: source.focalLength};
   }
   function placePane(pane: MountedPane, geometry: PrismGeometry, camera: PrismCamera, index: number, extraction = 0) {
     pane.element.style.zIndex = ''; delete pane.element.dataset.prismdeckWallet; delete pane.element.dataset.prismdeckWalletPose;
-    const at = geometry.positionAt(index); at[2] += geometry.paneWidth * 1.05 * extraction;
+    const at = geometry.positionAt(index);
+    const offset = extraction && isPlaneWorkspace() ? getPaneOffset(controller.getKey(index)!) : {x: 0, y: 0};
+    at[1] += offset.y * extraction;
+    at[2] += ((isPlaneWorkspace() ? 0 : geometry.paneWidth * 1.05) + offset.x) * extraction;
+    placeSurface(pane.element, geometry.paneWidth, geometry.paneHeight, at, camera);
+    pane.element.dataset.prismdeckWorldPosition = JSON.stringify(at);
+    pane.element.dataset.prismdeckWorldRotation = JSON.stringify([0, -Math.PI / 2, 0]);
+    pane.element.dataset.prismdeckExtraction = String(extraction);
+    pane.element.dataset.prismdeckPlaneOffset = JSON.stringify(offset);
+  }
+  function placeSurface(target: HTMLElement, paneWidth: number, paneHeight: number, at: readonly number[], camera: PrismCamera) {
     const relative = at.map((value, i) => value - camera.position[i]);
     const x = dot(relative, camera.right), y = -dot(relative, camera.up), depth = dot(relative, camera.direction);
-    pane.element.style.width = `${geometry.paneWidth}px`; pane.element.style.height = `${geometry.paneHeight}px`;
+    target.style.width = `${paneWidth}px`; target.style.height = `${paneHeight}px`;
     const matrix = [camera.right[2], -camera.up[2], -camera.direction[2], 0,
       -camera.right[1], camera.up[1], camera.direction[1], 0,
       camera.right[0], -camera.up[0], -camera.direction[0], 0,
       x, y, camera.focalLength - depth, 1];
-    pane.element.style.transform = `translate(-50%,-50%) matrix3d(${matrix.join(',')})`;
-    pane.element.style.visibility = depth <= 1 ? 'hidden' : '';
-    pane.element.dataset.prismdeckWorldPosition = JSON.stringify(at);
-    pane.element.dataset.prismdeckWorldRotation = JSON.stringify([0, -Math.PI / 2, 0]);
-    pane.element.dataset.prismdeckExtraction = String(extraction);
+    target.style.transform = `translate(-50%,-50%) matrix3d(${matrix.join(',')})`;
+    target.style.visibility = depth <= 1 ? 'hidden' : '';
   }
   function walletIndices(focus: number, zoom: number) {
     return visibleIndices(controller.getSnapshot().count, Math.max(0, focus), Math.min(options.maxVisible ?? 40, 9 + Math.round(8 * zoom)), 0);
@@ -347,6 +425,9 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     if (!selected) {
       viewFocus += (state.focus - viewFocus) * factor;
       viewZoom += (state.zoom - viewZoom) * factor;
+    } else if (isPlaneWorkspace()) {
+      viewZoom += (state.zoom - viewZoom) * factor;
+      selected.zoom = viewZoom;
     }
     if (Math.abs(viewFocus - state.focus) < 0.001) viewFocus = state.focus;
     if (Math.abs(viewZoom - state.zoom) < 0.0001) viewZoom = state.zoom;
@@ -423,6 +504,26 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
           viewport.style.transformOrigin = '0 0';
           viewport.style.transform = `translate(${16 * amount}px,${22 * amount}px) scale(${1 - 0.7 * amount})`;
           placePane(pane, geometry, selectionCamera, index, amount);
+          const workspace = isPlaneWorkspace();
+          const at = geometry.positionAt(index);
+          activePlane = workspace && amount === 1 ? {camera: selectionCamera, planeX: at[0]} : null;
+          planeGrid.element.hidden = !workspace || !appearance.planeGrid || amount === 0;
+          if (!planeGrid.element.hidden) {
+            const size = planeGrid.update(geometry.paneWidth, geometry.paneHeight, appearance.gridSize);
+            placeSurface(planeGrid.element, size.width, size.height, at, selectionCamera);
+            planeGrid.element.style.opacity = String(amount);
+            planeGrid.element.dataset.prismdeckWorldPosition = JSON.stringify(at);
+          }
+          const offset = getPaneOffset(selected.key);
+          planeTools.hidden = !workspace || options.controls === false || amount < 0.95;
+          const dragHint = appearance.paneDrag === 'free' ? 'Drag pane in any direction' : appearance.paneDrag === 'horizontal' ? 'Drag pane left or right' : appearance.paneDrag === 'vertical' ? 'Drag pane up or down' : 'Extended pane plane';
+          planeHint.textContent = `${dragHint} · ${appearance.snapToGrid ? `Snap ${appearance.gridSize}` : 'Free position'} · ${Math.round(offset.x)}, ${Math.round(offset.y)}`;
+          resetPosition.disabled = offset.x === 0 && offset.y === 0;
+          snapPreview.hidden = !workspace || !appearance.snapToGrid || !drag?.plane || !drag.moved;
+          if (!snapPreview.hidden) {
+            const snap = constrainedSnap(offset, drag!.plane!.offset);
+            placeSurface(snapPreview, geometry.paneWidth, geometry.paneHeight, [at[0], at[1] + snap.y, at[2] + snap.x], selectionCamera);
+          }
         }
         back.style.opacity = String(amount); back.disabled = amount < 0.95;
         selectionLabel.textContent = controller.getLabel(index); selectionLabel.style.opacity = String(amount);
@@ -455,6 +556,10 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     element.dataset.prismdeckSelectionMode = appearance.selectionMode;
     element.dataset.prismdeckPrismLines = String(!isWallet && appearance.prismLines);
     element.dataset.prismdeckTimelineRails = String(!isWallet && appearance.timelineRails);
+    element.dataset.prismdeckPlaneGrid = String(appearance.planeGrid);
+    element.dataset.prismdeckPaneDrag = appearance.paneDrag;
+    element.dataset.prismdeckSnapToGrid = String(appearance.snapToGrid);
+    element.dataset.prismdeckGridSize = String(appearance.gridSize);
     const text = state.count ? `${controller.getLabel(state.focus)} · ${state.focus + 1} / ${state.count}` : 'No panes';
     if (status.textContent !== text) status.textContent = text;
     zoom.value = String(state.zoom);
@@ -467,10 +572,10 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     viewToggle.textContent = width < 480 ? 'Angle' : 'View angle';
     element.dataset.prismdeckCount = String(state.count);
     element.dataset.prismdeckMounted = String(mounted.size);
-    if (!selected && (viewFocus !== state.focus || viewZoom !== state.zoom)) schedule();
+    if ((!selected && viewFocus !== state.focus) || ((isPlaneWorkspace() || !selected) && viewZoom !== state.zoom)) schedule();
   }
   function schedule() { if (!disposed && !frame) frame = requestAnimationFrame(render); }
-  const unsubscribe = controller.subscribe(schedule);
+  const unsubscribe = controller.subscribe(() => { prunePaneOffsets(); schedule(); });
   const resize = () => { width = Math.max(1, viewport.clientWidth); height = Math.max(1, viewport.clientHeight); schedule(); };
   const observer = new ResizeObserver(resize);
   observer.observe(viewport);
@@ -489,6 +594,24 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     if (event.key === 'Escape' && !viewPanel.hidden) { viewPanel.hidden = true; viewToggle.setAttribute('aria-expanded', 'false'); viewToggle.focus({preventScroll: true}); return; }
     if (event.ctrlKey || event.metaKey || event.altKey || (isControl(event.target) && !(event.target as Element).closest('.prismdeck-pane-select'))) return;
     if ((event.key === 'Enter' || event.key === ' ') && (event.target as Element).closest('.prismdeck-pane-select')) return;
+    if (selected?.amount === 1 && isPlaneWorkspace() && appearance.paneDrag !== 'none') {
+      const offset = getPaneOffset(selected.key), step = appearance.gridSize * (event.shiftKey ? 4 : 1);
+      if (event.key === 'Home') { commitPaneOffset({x: 0, y: 0}); event.preventDefault(); return; }
+      if (event.key.startsWith('Arrow')) {
+        const horizontal = event.key === 'ArrowLeft' || event.key === 'ArrowRight';
+        const vertical = event.key === 'ArrowUp' || event.key === 'ArrowDown';
+        event.preventDefault();
+        if ((horizontal && appearance.paneDrag === 'vertical') || (vertical && appearance.paneDrag === 'horizontal')) return;
+        if (horizontal) {
+          offset.x += event.key === 'ArrowLeft' ? -step : step;
+          if (appearance.snapToGrid) offset.x = snapPaneOffset({x: offset.x, y: 0}, appearance.gridSize).x;
+        } else if (vertical) {
+          offset.y += event.key === 'ArrowUp' ? step : -step;
+          if (appearance.snapToGrid) offset.y = snapPaneOffset({x: 0, y: offset.y}, appearance.gridSize).y;
+        }
+        commitPaneOffset(offset); return;
+      }
+    }
     switch (event.key) {
       case 'ArrowRight': case 'ArrowDown': browse(() => controller.move(1)); break;
       case 'ArrowLeft': case 'ArrowUp': browse(() => controller.move(-1)); break;
@@ -509,16 +632,15 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
   const onWheel = (event: WheelEvent) => {
     if (isControl(event.target) && !(event.target as Element).closest('.prismdeck-pane-select')) return;
     event.preventDefault();
-    if (selected) dismiss();
     const unit = event.deltaMode === 1 ? 20 : event.deltaMode === 2 ? height : 1;
     const state = controller.getSnapshot();
     if (event.ctrlKey || Math.abs(event.deltaY) >= Math.abs(event.deltaX)) {
-      controller.setZoom(state.zoom + event.deltaY * unit / (event.ctrlKey ? 360 : 900));
+      browse(() => controller.setZoom(state.zoom + event.deltaY * unit / (event.ctrlKey ? 360 : 900)));
     } else {
       if (performance.now() - wheelTime > 180) wheelFocus = state.focus;
       wheelTime = performance.now();
       wheelFocus = Math.max(0, Math.min(state.count - 1, wheelFocus + event.deltaX * unit / 110));
-      controller.focus(wheelFocus);
+      browse(() => controller.focus(wheelFocus));
     }
   };
   const distance = () => { const [a, b] = [...pointers.values()]; return a && b ? Math.hypot(b.x - a.x, b.y - a.y) : 1; };
@@ -529,15 +651,22 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
   const onDown = (event: PointerEvent) => {
     // Pane activation handles a click; touch/drag still works when it starts on the pane's selection surface.
     const orbit = options.cameraControls !== false && (orbitMode || event.shiftKey || event.button === 2);
-    if (selected && !orbit) return;
+    const plane = !orbit && selected?.mode === 'slide-out' && selected.amount === 1 && isPlaneWorkspace() && appearance.paneDrag !== 'none'
+      && event.currentTarget === selectionViewport ? pointerOnPlane(event) : null;
+    if (selected && !orbit && !plane && pointers.size === 0) return;
     if ((!orbit && event.button !== 0) || (isControl(event.target) && !(event.target as Element).closest('.prismdeck-pane-select'))) return;
     element.focus({preventScroll: true});
     pointers.set(event.pointerId, {x: event.clientX, y: event.clientY});
     if (pointers.size === 2) {
+      if (drag?.plane) storePaneOffset(drag.plane.key, drag.plane.offset);
+      element.classList.remove('is-plane-dragging');
+      const surface = drag?.surface ?? event.currentTarget as HTMLElement;
       pinch = {distance: Math.max(1, distance()), zoom: controller.getSnapshot().zoom}; drag = null;
-      for (const id of pointers.keys()) viewport.setPointerCapture(id);
+      for (const id of pointers.keys()) surface.setPointerCapture(id);
       quietClick();
-    } else if (!pinch) drag = {id: event.pointerId, x: event.clientX, y: event.clientY, focus: controller.getSnapshot().focus, moved: false, view: orbit ? controller.getSnapshot().view : undefined};
+    } else if (!pinch) drag = {id: event.pointerId, x: event.clientX, y: event.clientY, focus: controller.getSnapshot().focus, moved: false,
+      surface: event.currentTarget as HTMLElement, view: orbit ? controller.getSnapshot().view : undefined,
+      plane: plane && selected ? {key: selected.key, anchor: plane, offset: getPaneOffset(selected.key)} : undefined};
   };
   const onMove = (event: PointerEvent) => {
     if (!pointers.has(event.pointerId)) return;
@@ -548,10 +677,18 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
     if (!drag || drag.id !== event.pointerId) return;
     const dx = event.clientX - drag.x;
     const dy = event.clientY - drag.y;
-    if (Math.hypot(dx, drag.view ? dy : 0) > 6) { drag.moved = true; viewport.setPointerCapture(event.pointerId); }
+    if (Math.hypot(dx, drag.view || drag.plane ? dy : 0) > 6) { drag.moved = true; drag.surface.setPointerCapture(event.pointerId); }
     if (drag.moved) {
       if (drag.view && options.cameraControls === false) return;
-      if (drag.view) controller.setView({yaw: drag.view.yaw + dx * 0.2, pitch: drag.view.pitch - dy * 0.2});
+      if (drag.plane) {
+        if (appearance.paneDrag === 'none') return;
+        const point = pointerOnPlane(event);
+        if (point) storePaneOffset(drag.plane.key, {
+          x: drag.plane.offset.x + (appearance.paneDrag === 'vertical' ? 0 : point.x - drag.plane.anchor.x),
+          y: drag.plane.offset.y + (appearance.paneDrag === 'horizontal' ? 0 : point.y - drag.plane.anchor.y),
+        });
+        element.classList.add('is-plane-dragging');
+      } else if (drag.view) controller.setView({yaw: drag.view.yaw + dx * 0.2, pitch: drag.view.pitch - dy * 0.2});
       else controller.focus(drag.focus - dx / 64);
       quietClick();
     }
@@ -559,9 +696,21 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
   const onUp = (event: PointerEvent) => {
     if (!pointers.has(event.pointerId)) return;
     pointers.delete(event.pointerId);
-    if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
+    if (drag?.id === event.pointerId && drag.plane) {
+      if (event.type !== 'pointerup') storePaneOffset(drag.plane.key, drag.plane.offset);
+      else if (drag.moved && selected?.key === drag.plane.key) commitPaneOffset(constrainedSnap(getPaneOffset(drag.plane.key), drag.plane.offset));
+      element.classList.remove('is-plane-dragging');
+    }
+    if (drag?.surface.hasPointerCapture(event.pointerId)) drag.surface.releasePointerCapture(event.pointerId);
     if (pinch || drag?.moved || drag?.view) quietClick();
     if (!pointers.size) { drag = null; pinch = null; }
+    schedule();
+  };
+  const onLostCapture = (event: PointerEvent) => {
+    // Touch starts with implicit capture on a pane button. Transferring capture
+    // to the gesture surface bubbles the child's loss here; the gesture is live.
+    if (event.target !== event.currentTarget || (event.currentTarget as HTMLElement).hasPointerCapture(event.pointerId)) return;
+    onUp(event);
   };
   const onContext = (event: MouseEvent) => { if (options.cameraControls !== false) event.preventDefault(); };
   viewport.addEventListener('contextmenu', onContext);
@@ -570,16 +719,21 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
   viewport.addEventListener('wheel', onWheel, {passive: false});
   viewport.addEventListener('pointerdown', onDown);
   viewport.addEventListener('pointermove', onMove);
+  selectionViewport.addEventListener('contextmenu', onContext);
+  selectionViewport.addEventListener('wheel', onWheel, {passive: false});
+  selectionViewport.addEventListener('pointerdown', onDown);
+  selectionViewport.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);
   window.addEventListener('pointercancel', onUp);
-  viewport.addEventListener('lostpointercapture', onUp);
+  viewport.addEventListener('lostpointercapture', onLostCapture);
+  selectionViewport.addEventListener('lostpointercapture', onLostCapture);
   let safariZoom = 0;
   const onGestureStart = (event: Event) => { event.preventDefault(); safariZoom = controller.getSnapshot().zoom; quietClick(); };
   const onGestureChange = (event: Event) => { event.preventDefault(); controller.setZoom(safariZoom - Math.log(Math.max(0.01, (event as Event & {scale:number}).scale)) / 1.5); quietClick(); };
   viewport.addEventListener('gesturestart', onGestureStart, {passive: false});
   viewport.addEventListener('gesturechange', onGestureChange, {passive: false});
   resize();
-  return { element, controller,
+  return { element, controller, getPaneOffset, setPaneOffset,
     update(next) {
       if (disposed) return;
       const candidate = { ...options, ...next };
@@ -602,7 +756,7 @@ export function createPrismDeck<T>(mount: HTMLElement, initial: PrismDeckOptions
       disposed = true; cancelAnimationFrame(frame); clearTimeout(suppressTimer);
       observer.disconnect(); colorPreference?.removeEventListener('change', applyTheme); unsubscribe(); controller.dispose(); resetPresentation(); clearPanes();
       window.removeEventListener('pointerup', onUp); window.removeEventListener('pointercancel', onUp);
-      pointers.clear(); element.remove();
+      pointers.clear(); paneOffsets.clear(); element.remove();
     },
   };
 }

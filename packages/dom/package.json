@@ -1,6 +1,6 @@
 {
   "name": "@prismdeck/dom",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "Lightweight virtualized CSS 3D navigation widget",
   "type": "module",
   "license": "MIT",
@@ -36,10 +36,10 @@
     "access": "public"
   },
   "dependencies": {
-    "@prismdeck/core": "0.4.2"
+    "@prismdeck/core": "0.5.0"
   },
   "peerDependencies": {
-    "@prismdeck/three": "0.4.2"
+    "@prismdeck/three": "0.5.0"
   },
   "peerDependenciesMeta": {
     "@prismdeck/three": {

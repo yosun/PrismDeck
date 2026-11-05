@@ -1,6 +1,8 @@
 /** Renderer-independent state and geometry for ordered, parallel visual panes. */
 export { getWalletLayout } from './wallet.ts';
 export type { WalletLayout, WalletLayoutOptions, WalletPaneLayout } from './wallet.ts';
+export { getPlaneGrid, intersectPanePlane, snapPaneOffset } from './plane.ts';
+export type { PaneOffset, PlaneGridLine } from './plane.ts';
 
 export type PrismKey = string | number;
 export type PrismVector3 = [number, number, number];

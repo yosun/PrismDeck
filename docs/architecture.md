@@ -69,15 +69,20 @@ a slide editor, or an application route.
 
 The DOM renderer supplies independent presentation options:
 
-- `layout` chooses the `'prism'` volume or `'wallet'` card fan.
+- `layout` defaults to the `'prism'` volume in every preset; the explicit
+  `'wallet'` layout remains for compatibility.
 - `selectionMode` chooses `'slide-out'`, `'modal'`, or `'none'`.
 - `prismLines` controls the perspective rectangular prism outline in prism layout.
 - `timelineRails` controls rails along the ordered axis. Their geometry follows
   the axis; it does not require chronological content. Rails apply to prism layout.
+- `planeGrid` extends the selected pane's plane into a grid.
+- `paneDrag` permits free, horizontal, vertical, or no dragging in that plane.
+- `snapToGrid` independently snaps committed drags; `gridSize` sets world spacing.
 
 Version A combines slide-out, prism lines, and rails. Version B combines modal
-selection with both line systems hidden. Version C combines wallet layout and
-slide-out selection with both line systems hidden. They are presets, so each
+selection with both line systems hidden. Version C combines prism layout,
+slide-out selection, both line systems, an extended plane grid, free dragging, and
+snapping. They are presets, so each
 explicit option overrides its preset independently. React forwards the same
 options into the DOM renderer. No preset changes adapters, ordering, content,
 theme, or XR loading.
@@ -88,19 +93,26 @@ the perpendicular axis, and interpolates a separate camera to face it. The
 archive shrinks into the upper-left portion of the view, preserving context.
 It does not replace the pane with a second image or open an overlay dialog.
 
-Wallet layout presents the same bounded content window as cards fanned out of a
-pocket. Its slide-out raises the selected card into the reading layer and keeps
-its slot in the wallet; dismissal returns the card to its place. The collection
-stays ordered. Zoom adjusts the fan's density, and existing keyboard, pointer,
-and touch controls retain their navigation semantics. The pocket is rendered
-with CSS and uses no image resources or renderer dependencies. Prism outlines
-and rails stay hidden while wallet layout is active, with their configuration
-retained for a return to prism layout.
+The extended workspace retains the selected original pane and builds a grid in
+its local plane. The camera stays oblique so the grid and prism remain spatial.
+Pointer displacement is projected into that plane, allowing motion in every
+direction rather than a screen-space slide to the right. A drag may be free or
+constrained to one local axis, and release may snap to the nearest grid
+intersection. Grid rendering, drag direction, snapping, and spacing are
+independent options. Shift/right dragging and the Rotate mode continue to orbit
+the camera.
 
-The demo's wildcard action is application code using the shared controller. It
-focuses a different random index and selects that card without shuffling or
-reordering the collection. An application can supply its own discovery strategy;
-the library does not attach meaning or randomness to the ordered axis.
+Workspace offsets live in the DOM presentation layer, keyed by stable content
+identity. They never change controller ordering or the original prism poses.
+Dismissal restores the pane's prism position; reopening restores its workspace
+offset. Item removal and disposal release offsets. The user-commit callback
+`onPaneMove` reports one final offset after a drag, keyboard move, or centering; programmatic offset changes
+are quiet. Grid geometry adds no image resources, framework, WebGL, or XR import.
+The examples auto-select C's focused pane for an immediate workspace preview;
+the reusable library keeps selection application-controlled.
+
+The explicit wallet layout is retained only for compatibility and is absent from
+the current presets and demo controls.
 
 The modal presentation moves the same selected pane into a native dialog.
 Dismissal restores the pane and focus. A caller can provide `renderSelection`
@@ -126,10 +138,10 @@ presentation changes preserve this state. An adapter does not need to understand
 camera controls or assign semantic meaning to an angle.
 
 The DOM renderer turns the prism camera basis for both content and guides. This
-keeps the cross section and its pane corners aligned while orbiting. Wallet
-layout applies the same user angle to a volume containing the fan and pocket,
-so its cards remain inside a coherent object. Selection uses its own reading
-presentation and retains the collection's angle for dismissal.
+keeps the cross section and its pane corners aligned while orbiting. The extended
+workspace projects the grid and its pane through that same camera; dragging
+therefore follows the pane at any view angle. The regular slide-out and modal
+use their reading presentations and retain the collection's angle for dismissal.
 
 The shared **View angle** panel supplies horizontal and vertical sliders, a
 **Rotate** drag toggle, and reset. Enabling **Rotate** makes one-finger orbit

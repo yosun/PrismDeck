@@ -1,5 +1,5 @@
 import { createPrismDeck, PRISMDECK_PRESETS as presets } from '@prismdeck/dom';
-import type { PrismDeckVariant as Variant, PrismDeckSelectionMode as SelectionMode, PrismDeckLayout as Layout } from '@prismdeck/dom';
+import type { PrismDeckVariant as Variant, PrismDeckSelectionMode as SelectionMode } from '@prismdeck/dom';
 import '@prismdeck/dom/style.css';
 import './style.css';
 
@@ -21,14 +21,17 @@ const prismLines = element<HTMLInputElement>('prism-lines');
 const timelineRails = element<HTMLInputElement>('timeline-rails');
 const cameraControls = element<HTMLInputElement>('camera-controls');
 const selectionMode = element<HTMLSelectElement>('selection-mode');
-const layout = element<HTMLSelectElement>('layout');
+const planeGrid = element<HTMLInputElement>('plane-grid');
+const paneDrag = element<HTMLSelectElement>('pane-drag');
+const snapToGrid = element<HTMLInputElement>('snap-to-grid');
+const gridSize = element<HTMLSelectElement>('grid-size');
+type PaneDrag = 'free' | 'horizontal' | 'vertical' | 'none';
 const requestedVariant = new URL(location.href).searchParams.get('variant');
 let variant: Variant = requestedVariant === 'B' || requestedVariant === 'C' ? requestedVariant : 'A';
 let theme = getDemoTheme();
 applyDemoTheme(theme, false);
 let slides = collection(1000);
-// Center the first wallet window so the opening fan shows cards on both sides.
-const initialFocus = variant === 'C' ? 4 : 0;
+const initialFocus = 0;
 let focused = slides[initialFocus];
 
 function updateFocus(slide: Slide, index: number) {
@@ -45,33 +48,39 @@ function selectSlide(slide: Slide, index: number) {
 }
 
 function describeSelection() {
-  const wallet = layout.value === 'wallet';
-  element('stage-name').textContent = wallet ? 'WALLET WILDCARD' : 'LIVE PRISM';
-  element('wallet-note').hidden = !wallet;
-  element('draw-card').hidden = !wallet;
-  prismLines.disabled = wallet;
-  timelineRails.disabled = wallet;
-  prismLines.title = wallet ? 'Available in Prism layout' : '';
-  timelineRails.title = wallet ? 'Available in Prism layout' : '';
-  element('variant-description').textContent = wallet && selectionMode.value === 'slide-out'
-    ? 'A pocket of possibilities. Draw a card, follow a thought, and return it to its place.'
-    : wallet
-      ? 'A pocket of possibilities. Browse the fan or draw an unexpected card.'
-      : selectionMode.value === 'slide-out'
-    ? 'Slide a pane out of the prism. Keep your place in the collection.'
-    : selectionMode.value === 'modal'
-      ? 'Open a pane in a modal. Return to the deck when you are ready.'
-      : 'Select a pane while keeping the collection in view.';
+  const drag = paneDrag.value;
+  const workspace = selectionMode.value === 'slide-out' && (planeGrid.checked || drag !== 'none');
+  const dragHelp = drag === 'none' ? 'Pane dragging is disabled.' : `${drag === 'free' ? 'Drag in any direction' : `Drag ${drag === 'horizontal' ? 'left or right' : 'up or down'}`}${snapToGrid.checked ? ' and release to snap.' : ' for free placement.'}`;
+  element('stage-name').textContent = workspace ? 'EXTENDED DECK PLANE' : 'LIVE PRISM';
+  element('variant-description').textContent = workspace
+    ? `${planeGrid.checked ? 'Extend the selected pane into a grid' : 'Move the selected pane across its plane'} while keeping the prism in view. ${dragHelp}`
+    : selectionMode.value === 'slide-out'
+      ? 'Slide a pane out of the prism. Keep your place in the collection.'
+      : selectionMode.value === 'modal'
+        ? 'Open a pane in a modal. Return to the deck when you are ready.'
+        : 'Select a pane while keeping the collection in view.';
+  element('camera-hint').textContent = workspace && drag !== 'none'
+    ? `${drag === 'free' ? 'Drag pane in any direction' : `Drag pane ${drag === 'horizontal' ? 'left or right' : 'up or down'}`} · ${snapToGrid.checked ? 'Release to snap' : 'Free placement'}${cameraControls.checked ? ' · Shift-drag to rotate' : ''}`
+    : cameraControls.checked ? 'Shift-drag to rotate · Drag to browse' : 'Drag to browse · Scroll or pinch to zoom';
+  const movePane = workspace && drag !== 'none';
+  element('navigation-help-action').textContent = movePane ? 'Move pane' : 'Navigate';
+  element('pane-reset-key').hidden = !movePane;
+  element('pane-reset-action').hidden = !movePane;
+  element('camera-help-button').hidden = !cameraControls.checked;
+  element('camera-help-action').hidden = !cameraControls.checked;
 }
 
 function showVariant() {
   element('version-a').setAttribute('aria-pressed', String(variant === 'A'));
   element('version-b').setAttribute('aria-pressed', String(variant === 'B'));
   element('version-c').setAttribute('aria-pressed', String(variant === 'C'));
-  layout.value = presets[variant].layout;
   prismLines.checked = presets[variant].prismLines;
   timelineRails.checked = presets[variant].timelineRails;
   selectionMode.value = presets[variant].selectionMode;
+  planeGrid.checked = presets[variant].planeGrid;
+  paneDrag.value = presets[variant].paneDrag;
+  snapToGrid.checked = presets[variant].snapToGrid;
+  gridSize.value = String(presets[variant].gridSize);
   describeSelection();
 }
 
@@ -121,7 +130,6 @@ function setCollection(count: number) {
   sequence.max = String(Math.max(0, safeCount - 1));
   sequence.disabled = safeCount === 0;
   element('open-pane').toggleAttribute('disabled', safeCount === 0);
-  element('draw-card').toggleAttribute('disabled', safeCount === 0);
   element('collection-count').textContent = `${safeCount.toLocaleString()} panes`;
   collectionSize.value = String(safeCount);
   if (safeCount) updateFocus(slides[deck.controller.getSnapshot().focus], deck.controller.getSnapshot().focus);
@@ -133,29 +141,25 @@ function setCollection(count: number) {
 }
 
 collectionSize.addEventListener('change', () => setCollection(Number(collectionSize.value)));
-sequence.addEventListener('input', () => deck.controller.focus(Number(sequence.value)));
+sequence.addEventListener('input', () => {
+  const workspaceOpen = deck.controller.getSnapshot().selectedKey !== null
+    && selectionMode.value === 'slide-out' && (planeGrid.checked || paneDrag.value !== 'none');
+  deck.controller.focus(Number(sequence.value));
+  if (workspaceOpen) deck.controller.select();
+});
 element('open-pane').addEventListener('click', () => {
   deck.controller.select();
   deck.element.focus({ preventScroll: true });
 });
-element('draw-card').addEventListener('click', () => {
-  const { focus, count } = deck.controller.getSnapshot();
-  if (!count) return;
-  // Explore a different card without shuffling the application's ordered items.
-  const next = count < 2 ? 0 : (focus + 1 + Math.floor(Math.random() * (count - 1))) % count;
-  deck.controller.dismiss();
-  deck.controller.focus(next);
-  deck.controller.select();
-  deck.element.focus({ preventScroll: true });
-  element('selection-status').textContent = `Your wildcard: ${slides[next].title}. A new perspective from pane ${next + 1}.`;
-});
+
 function setVariant(next: Variant) {
   variant = next;
   deck.controller.dismiss();
   // Clearing overrides makes each version a preset, not a separate widget.
-  deck.update({ variant, layout: undefined, selectionMode: undefined, prismLines: undefined, timelineRails: undefined });
+  deck.update({ variant, layout: undefined, selectionMode: undefined, prismLines: undefined, timelineRails: undefined, planeGrid: undefined, paneDrag: undefined, snapToGrid: undefined, gridSize: undefined });
   showVariant();
   element('selection-status').textContent = 'Select a pane to bring it into view.';
+  if (variant === 'C') deck.controller.select();
   const url = new URL(location.href);
   url.searchParams.set('variant', variant);
   history.replaceState(history.state, '', url);
@@ -163,29 +167,39 @@ function setVariant(next: Variant) {
 element('version-a').addEventListener('click', () => setVariant('A'));
 element('version-b').addEventListener('click', () => setVariant('B'));
 element('version-c').addEventListener('click', () => setVariant('C'));
-layout.addEventListener('change', () => {
-  deck.update({ layout: layout.value as Layout });
+planeGrid.addEventListener('change', () => {
+  deck.update({ planeGrid: planeGrid.checked });
+  describeSelection();
+  if (planeGrid.checked && selectionMode.value === 'slide-out') deck.controller.select();
+});
+paneDrag.addEventListener('change', () => {
+  deck.update({ paneDrag: paneDrag.value as PaneDrag });
+  describeSelection();
+  if (paneDrag.value !== 'none' && selectionMode.value === 'slide-out') deck.controller.select();
+});
+snapToGrid.addEventListener('change', () => {
+  deck.update({ snapToGrid: snapToGrid.checked });
   describeSelection();
 });
+gridSize.addEventListener('change', () => deck.update({ gridSize: Number(gridSize.value) }));
 prismLines.addEventListener('change', () => deck.update({ prismLines: prismLines.checked }));
 timelineRails.addEventListener('change', () => deck.update({ timelineRails: timelineRails.checked }));
 cameraControls.addEventListener('change', () => {
   deck.update({ cameraControls: cameraControls.checked });
-  element('camera-hint').textContent = cameraControls.checked
-    ? 'Shift-drag to orbit · Drag to browse'
-    : 'Drag to browse · Scroll or pinch to zoom';
-  element('camera-help-button').hidden = !cameraControls.checked;
-  element('camera-help-action').hidden = !cameraControls.checked;
+  describeSelection();
 });
 selectionMode.addEventListener('change', () => {
   deck.update({ selectionMode: selectionMode.value as SelectionMode });
   describeSelection();
+  if ((planeGrid.checked || paneDrag.value !== 'none') && selectionMode.value === 'slide-out') deck.controller.select();
   element('selection-status').textContent = selectionMode.value === 'none'
     ? 'Selection is app-defined. This example reports the selected pane here.'
     : 'Select a pane to bring it into view.';
 });
 showVariant();
 updateFocus(focused, initialFocus);
+// The example opens the workspace; the library itself never auto-selects.
+if (variant === 'C') deck.controller.select();
 
 // Explicit opt-in is the boundary: the ordinary demo imports neither Three nor XR.
 let spatial: { dispose(): void; renderer: import('three').WebGLRenderer } | undefined;

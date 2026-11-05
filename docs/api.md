@@ -143,11 +143,16 @@ import { createPrismDeck, PRISMDECK_PRESETS, resolvePresentationOptions } from '
 | --- | --- |
 | `renderPane(item, index)` | Returns a `Node`, plain text string, or `{ element: Node, dispose?: () => void }` |
 | `variant` | `'A'` (default), `'B'`, or `'C'`; selects presentation defaults |
-| `layout` | `'prism'` or `'wallet'`; overrides the preset layout |
+| `layout` | `'prism'` for all presets; `'wallet'` remains an explicit compatibility layout |
 | `theme` | `'system'` (default), `'light'` (Day), or `'dark'` (Night); independent of presentation presets |
 | `selectionMode` | `'slide-out'`, `'modal'`, or `'none'`; overrides the preset |
 | `prismLines` | Boolean override for the perspective rectangular prism outline; applies to prism layout |
 | `timelineRails` | Boolean override for rails along the ordered axis; applies to prism layout |
+| `planeGrid` | Extend a grid across the selected pane's plane in slide-out selection; Version C enables it |
+| `paneDrag` | `'free'`, `'horizontal'`, `'vertical'`, or `'none'`; allowed drag directions in the selected pane's plane |
+| `snapToGrid` | Snap a released pane to the grid; independent of grid visibility |
+| `gridSize` | Grid spacing in pane world units; finite values in `[8, 1024]`, default `80` |
+| `onPaneMove(item, index, offset)` | Committed user-placement callback, with `{ x, y }` world-coordinate offset in the pane plane |
 | `transitionDuration` | Approximate slide-out settling time in milliseconds; finite and nonnegative, default `700`; `0` is instant |
 | `renderSelection(item, index)` | Optional detail content, with the same return types as `renderPane`; otherwise the selected pane's content is reused |
 | `onActivate(item, index)` | Optional second activation of the already selected pane |
@@ -165,11 +170,20 @@ import { createPrismDeck, PRISMDECK_PRESETS, resolvePresentationOptions } from '
 | --- | --- | --- | --- | --- |
 | `'A'` (default) | `'prism'` | `'slide-out'` | `true` | `true` |
 | `'B'` | `'prism'` | `'modal'` | `false` | `false` |
-| `'C'` | `'wallet'` | `'slide-out'` | `false` | `false` |
+| `'C'` | `'prism'` | `'slide-out'` | `true` | `true` |
+
+| Preset | `planeGrid` | `paneDrag` | `snapToGrid` | `gridSize` |
+| --- | --- | --- | --- | --- |
+| A / B | `false` | `'none'` | `true` | `80` |
+| C | `true` | `'free'` | `true` | `80` |
+
+Snapping stays inert while pane dragging is disabled. Enable dragging on A or B
+without changing the other preset features.
 
 `PRISMDECK_PRESETS` exports the immutable preset values.
 `resolvePresentationOptions(options)` returns the resolved variant, layout, mode,
-line options, and transition duration, and validates these presentation options.
+line options, pane-workspace options, and transition duration, and validates these
+presentation options.
 Reduced motion always takes precedence over `transitionDuration`.
 
 Every explicit option takes precedence over its preset independently. Change a
@@ -187,8 +201,8 @@ const deck = createPrismDeck(mount, {
 });
 deck.update({ selectionMode: 'slide-out' });
 deck.update({ selectionMode: undefined }); // Return to Version B's modal.
-deck.update({ variant: 'C', layout: undefined }); // Wallet, still with the explicit rails setting.
-deck.update({ layout: 'prism' }); // Prism layout; the rails are visible again.
+deck.update({ variant: 'C' }); // Prism with a draggable snap-grid workspace.
+deck.update({ planeGrid: false, snapToGrid: false }); // Drag freely without a visible grid or snapping.
 ```
 
 `'slide-out'` moves the selected pane perpendicular to its surface into a separate
@@ -198,13 +212,36 @@ Both reuse the mounted pane by default. Escape dismisses either view. **Back to
 deck** dismisses slide-out selection; the modal close button or backdrop also dismisses it. Closing restores the
 pane to the deck and keyboard focus to browsing.
 
-Wallet layout arranges the bounded pane window in a fan inside a pocket. Its
-slide-out lifts the original pane into a reading view and retains the pane's slot
-for dismissal. It uses the same focus, selection, and zoom state as prism layout,
-with no new content requests, animation framework, WebGL, or XR dependency.
-The example's **Draw a card** action is application code: it chooses a different
-random index, then calls `controller.focus(index)` and `controller.select()`.
-It never shuffles the items or changes their axis positions.
+Version C enables `planeGrid: true`, `paneDrag: 'free'`, `snapToGrid: true`,
+and `gridSize: 80`. Its grid extends the selected pane's own plane. Dragging
+projects pointer movement into that plane, so diagonal, leftward, and vertical
+motion work at oblique viewing angles. The ordered prism stays visible. The
+library does not select automatically; the examples open C's focused pane on
+initial load and when choosing the preset.
+
+`paneDrag: 'horizontal'` constrains movement to the pane's horizontal axis;
+`'vertical'` constrains it to the vertical axis; `'none'` disables plane dragging.
+These are local plane axes, not screen directions. Snapping happens on release,
+uses the nearest grid intersection, and can be enabled without rendering the
+grid. The options apply to slide-out selection; modal and app-defined selection
+retain their own presentation. Shift-drag, right-drag, and **Rotate** retain
+camera control.
+
+With a selected workspace and enabled pane dragging, Arrow keys move the pane by
+`gridSize` along its local axes. Shift + Arrow keys move four grid spacings;
+**Home** or **Center pane** resets its offset. Axis constraints apply to keyboard
+motion. Escape dismisses selection and restores ordinary sequence navigation.
+
+Workspace offsets are stored by stable pane key. Dismissing selection restores
+the pane's original ordered location in the prism; reopening restores its
+workspace offset. Focus, density, camera, and theme changes preserve offsets.
+Removing an item or disposing the widget releases its offset. `onPaneMove` fires
+once after a committed user placement (drag, keyboard, or **Center pane**);
+programmatic changes do not fire it.
+
+The explicit `layout: 'wallet'` option remains for compatibility; none of the
+current presets use it. It adds no rendering or image dependency.
+
 When an application button outside the widget opens a slide-out, focus
 `deck.element` with `{ preventScroll: true }` so the widget receives keyboard
 navigation and Escape. Programmatic selection itself preserves application focus.
@@ -232,7 +269,12 @@ The returned `PrismDeckInstance<T>` exposes:
 - `element`: the widget root.
 - `controller`: the headless controller.
 - `update(partialOptions)`: updates the existing widget and reconciles its content.
-- `dispose()`: releases content, listeners, observer, pending frames, and controller.
+- `getPaneOffset(key: PrismKey): PaneOffset`: returns a fresh `{ x, y }` object,
+  defaulting to zero. `PrismKey` is a stable string or number key, not an ordered index.
+- `setPaneOffset(key: PrismKey, offset: PaneOffset): void`: stores exact finite
+  world-coordinate offsets. Unknown keys and nonfinite values are ignored. It
+  neither snaps coordinates nor invokes `onPaneMove`.
+- `dispose()`: releases content, offsets, listeners, observer, pending frames, and controller.
 
 Invalid key/position updates preserve the previous widget. A pane's application
 cleanup should release resources it owns; the library does not revoke your
@@ -268,7 +310,7 @@ at creation. Use `view`, `controller.setView`, or `controller.resetView` later.
 
 Focus, zoom, layout changes, and switching Versions A/B/C retain the current
 angle. Version A's prism boundaries and rails use the same camera as its panes;
-Version C rotates the wallet fan and pocket together. Selection presents a
+Version C's grid and dragged pane use the same projected plane. Selection presents a
 readable pane while retaining the collection's angle for the return to browsing.
 The camera adds no renderer dependencies or image resources.
 
@@ -313,7 +355,8 @@ import { PrismDeck, Pane, usePrismDeck } from '@prismdeck/react';
 
 `PrismDeck<T>` accepts the DOM options with `renderPane(item, index): ReactNode`
 and optional `renderSelection(item, index): ReactNode`. This includes `variant`,
-`layout`, `selectionMode`, `prismLines`, `timelineRails`, `theme`, `cameraControls`,
+`layout`, `selectionMode`, `prismLines`, `timelineRails`, `planeGrid`, `paneDrag`,
+`snapToGrid`, `gridSize`, `onPaneMove`, `theme`, `cameraControls`,
 `view`, `onViewChange`, and `onActivate`. These props can change without remounting
 the widget. `initialView`, like `initialFocus` and `initialZoom`, sets the initial
 state only.

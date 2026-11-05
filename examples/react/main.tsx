@@ -2,7 +2,7 @@ import * as React from 'react';
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PrismDeck, PRISMDECK_PRESETS as presets } from '@prismdeck/react';
-import type { PrismDeckInstance, PrismDeckVariant as Variant, PrismDeckSelectionMode as SelectionMode, PrismDeckLayout as Layout } from '@prismdeck/react';
+import type { PrismDeckInstance, PrismDeckVariant as Variant, PrismDeckSelectionMode as SelectionMode } from '@prismdeck/react';
 import '@prismdeck/dom/style.css';
 import '../vanilla/style.css';
 
@@ -14,6 +14,8 @@ import type { DemoTheme } from '../shared/theme';
 function MyContent({ item }: { item: Slide }) {
   return <img src={imageSource(item)} alt={`${item.title}, synthetic study ${item.index + 1}`} draggable={false} decoding="async" />;
 }
+
+type PaneDrag = 'free' | 'horizontal' | 'vertical' | 'none';
 
 const getKey = (item: Slide) => item.id;
 const adapter = { getKey, getLabel: (item: Slide) => `${item.title}, pane ${item.index + 1}` };
@@ -35,20 +37,31 @@ function App() {
     const requested = new URL(location.href).searchParams.get('variant');
     return requested === 'B' || requested === 'C' ? requested : 'A';
   });
-  const initialFocus = useRef(variant === 'C' ? 4 : 0).current;
+  const initialFocus = 0;
   const [focus, setFocus] = useState(initialFocus);
-  const [layout, setLayout] = useState<Layout | undefined>();
+  const [planeGrid, setPlaneGrid] = useState<boolean | undefined>();
+  const [paneDrag, setPaneDrag] = useState<PaneDrag | undefined>();
+  const [snapToGrid, setSnapToGrid] = useState<boolean | undefined>();
+  const [gridSize, setGridSize] = useState<number | undefined>();
   const [prismLines, setPrismLines] = useState<boolean | undefined>();
   const [timelineRails, setTimelineRails] = useState<boolean | undefined>();
   const [cameraControls, setCameraControls] = useState(true);
   const [selectionMode, setSelectionMode] = useState<SelectionMode | undefined>();
   const [status, setStatus] = useState('Select a pane to bring it into view.');
+  const [workspaceRequest, setWorkspaceRequest] = useState(0);
   const deck = useRef<PrismDeckInstance<Slide> | null>(null);
   const focused = items[Math.min(focus, items.length - 1)];
-  const resolvedLayout = layout ?? presets[variant].layout;
+  const resolvedGrid = planeGrid ?? presets[variant].planeGrid;
+  const resolvedDrag = paneDrag ?? presets[variant].paneDrag;
+  const resolvedSnap = snapToGrid ?? presets[variant].snapToGrid;
   const resolvedSelection = selectionMode ?? presets[variant].selectionMode;
-  const wallet = resolvedLayout === 'wallet';
+  const workspace = resolvedSelection === 'slide-out' && (resolvedGrid || resolvedDrag !== 'none');
+  const dragHelp = resolvedDrag === 'none' ? 'Pane dragging is disabled.' : `${resolvedDrag === 'free' ? 'Drag in any direction' : `Drag ${resolvedDrag === 'horizontal' ? 'left or right' : 'up or down'}`}${resolvedSnap ? ' and release to snap.' : ' for free placement.'}`;
   const handleReady = useCallback((instance: PrismDeckInstance<Slide>) => { deck.current = instance; }, []);
+  // Opening the workspace is example behavior, never a library side effect.
+  useEffect(() => {
+    if (workspace) deck.current?.controller.select();
+  }, [variant, workspace, workspaceRequest]);
   const handleFocus = useCallback((_item: Slide, index: number) => setFocus(index), []);
   const handleSelect = useCallback((item: Slide, index: number) => {
     setStatus(`Selected ${index + 1}: ${item.title}. Select it again to activate.`);
@@ -61,7 +74,11 @@ function App() {
   function chooseVariant(next: Variant) {
     deck.current?.controller.dismiss();
     setVariant(next);
-    setLayout(undefined);
+    setWorkspaceRequest((request) => request + 1);
+    setPlaneGrid(undefined);
+    setPaneDrag(undefined);
+    setSnapToGrid(undefined);
+    setGridSize(undefined);
     setPrismLines(undefined);
     setTimelineRails(undefined);
     setSelectionMode(undefined);
@@ -69,20 +86,6 @@ function App() {
     const url = new URL(location.href);
     url.searchParams.set('variant', next);
     history.replaceState(history.state, '', url);
-  }
-
-  function drawCard() {
-    const controller = deck.current?.controller;
-    if (!controller) return;
-    const { focus: current, count: total } = controller.getSnapshot();
-    if (!total) return;
-    // Discovery changes focus, never the order supplied by the application.
-    const next = total < 2 ? 0 : (current + 1 + Math.floor(Math.random() * (total - 1))) % total;
-    controller.dismiss();
-    controller.focus(next);
-    controller.select();
-    deck.current?.element.focus({ preventScroll: true });
-    setStatus(`Your wildcard: ${items[next].title}. A new perspective from pane ${next + 1}.`);
   }
 
   function viewPane() {
@@ -102,18 +105,21 @@ function App() {
             <div className="variant-switch" role="group" aria-label="Browsing experience">
               <button type="button" aria-pressed={variant === 'A'} onClick={() => chooseVariant('A')}><strong>Version A</strong><span>Seamless slide-out</span></button>
               <button type="button" aria-pressed={variant === 'B'} onClick={() => chooseVariant('B')}><strong>Version B</strong><span>Modal</span></button>
-              <button type="button" aria-pressed={variant === 'C'} onClick={() => chooseVariant('C')}><strong>Version C</strong><span>Wallet wildcard</span></button>
+              <button type="button" aria-pressed={variant === 'C'} onClick={() => chooseVariant('C')}><strong>Version C</strong><span>Snap grid</span></button>
             </div>
-            <p className="variant-description">{wallet ? resolvedSelection === 'slide-out' ? 'A pocket of possibilities. Draw a card, follow a thought, and return it to its place.' : 'A pocket of possibilities. Browse the fan or draw an unexpected card.' : resolvedSelection === 'slide-out' ? 'Slide a pane out of the prism. Keep your place in the collection.' : resolvedSelection === 'none' ? 'Select a pane while keeping the collection in view.' : 'Open a pane in a modal. Return to the deck when you are ready.'}</p>
+            <p className="variant-description">{workspace ? `${resolvedGrid ? 'Extend the selected pane into a grid' : 'Move the selected pane across its plane'} while keeping the prism in view. ${dragHelp}` : resolvedSelection === 'slide-out' ? 'Slide a pane out of the prism. Keep your place in the collection.' : resolvedSelection === 'none' ? 'Select a pane while keeping the collection in view.' : 'Open a pane in a modal. Return to the deck when you are ready.'}</p>
             <div className="feature-controls" role="group" aria-label="Independent display options">
-              <label>Layout <select value={resolvedLayout} onChange={(event) => setLayout(event.target.value as Layout)}><option value="prism">Prism</option><option value="wallet">Wallet</option></select></label>
-              <label><input type="checkbox" checked={prismLines ?? presets[variant].prismLines} disabled={wallet} title={wallet ? 'Available in Prism layout' : undefined} onChange={(event) => setPrismLines(event.target.checked)} /> Prism lines</label>
-              <label><input type="checkbox" checked={timelineRails ?? presets[variant].timelineRails} disabled={wallet} title={wallet ? 'Available in Prism layout' : undefined} onChange={(event) => setTimelineRails(event.target.checked)} /> Timeline rails</label>
+              <label><input type="checkbox" checked={prismLines ?? presets[variant].prismLines} onChange={(event) => setPrismLines(event.target.checked)} /> Prism lines</label>
+              <label><input type="checkbox" checked={timelineRails ?? presets[variant].timelineRails} onChange={(event) => setTimelineRails(event.target.checked)} /> Timeline rails</label>
               <label><input type="checkbox" title="Show camera controls and enable angle gestures and shortcuts" checked={cameraControls} onChange={(event) => setCameraControls(event.target.checked)} /> Angle controls</label>
+              <label><input type="checkbox" checked={resolvedGrid} onChange={(event) => setPlaneGrid(event.target.checked)} /> Plane grid</label>
+              <label>Pane drag <select aria-label="Pane drag" value={resolvedDrag} onChange={(event) => setPaneDrag(event.target.value as PaneDrag)}><option value="free">Any direction</option><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option><option value="none">Disabled</option></select></label>
+              <label><input type="checkbox" checked={resolvedSnap} onChange={(event) => setSnapToGrid(event.target.checked)} /> Snap to grid</label>
+              <label>Grid size <select aria-label="Grid size" value={gridSize ?? presets[variant].gridSize} onChange={(event) => setGridSize(Number(event.target.value))}><option value="40">Fine · 40</option><option value="80">Regular · 80</option><option value="120">Wide · 120</option><option value="160">Extra wide · 160</option></select></label>
               <label className="selection-mode-label">Selection <select value={selectionMode ?? presets[variant].selectionMode} onChange={(event) => setSelectionMode(event.target.value as SelectionMode)}><option value="slide-out">Slide-out</option><option value="modal">Modal</option><option value="none">App-defined</option></select></label>
             </div>
           </div>
-          <div className="deck-stage"><div className="stage-label"><span className="live-dot" />{wallet ? 'WALLET WILDCARD' : 'LIVE PRISM'}<span className="stage-hint">{cameraControls ? 'Shift-drag to orbit · Drag to browse' : 'Drag to browse · Scroll or pinch to zoom'}</span></div>{wallet && <p className="wallet-note">A little room for a new perspective.</p>}<div className="react-deck-host">
+          <div className="deck-stage"><div className="stage-label"><span className="live-dot" />{workspace ? 'EXTENDED DECK PLANE' : 'LIVE PRISM'}<span className="stage-hint">{workspace && resolvedDrag !== 'none' ? `${resolvedDrag === 'free' ? 'Drag pane in any direction' : `Drag pane ${resolvedDrag === 'horizontal' ? 'left or right' : 'up or down'}`} · ${resolvedSnap ? 'Release to snap' : 'Free placement'}${cameraControls ? ' · Shift-drag to rotate' : ''}` : cameraControls ? 'Shift-drag to rotate · Drag to browse' : 'Drag to browse · Scroll or pinch to zoom'}</span></div><div className="react-deck-host">
             <PrismDeck
               items={items}
               getKey={getKey}
@@ -121,7 +127,10 @@ function App() {
               renderPane={renderPane}
               variant={variant}
               initialFocus={initialFocus}
-              layout={layout}
+              planeGrid={planeGrid}
+              paneDrag={paneDrag}
+              snapToGrid={snapToGrid}
+              gridSize={gridSize}
               theme={theme}
               selectionMode={selectionMode}
               prismLines={prismLines}
@@ -136,10 +145,10 @@ function App() {
               label="Browse the studies in perspective slide collection"
             />
           </div><span className="stage-axis" aria-hidden="true">SEQUENCE →</span></div>
-          <div className="selection-bar"><div className="focus-info"><span className="focus-number">{String(focused.index + 1).padStart(3, '0')}</span><div><p className="eyebrow">FORM / TONE / POSSIBILITY</p><h3>{focused.title}</h3></div></div><div className="selection-actions">{wallet && <button className="secondary-button" onClick={drawCard}>Draw a card <span aria-hidden="true">⤨</span></button>}<button className="primary-button" onClick={viewPane}>View pane <span aria-hidden="true">↗</span></button></div></div>
+          <div className="selection-bar"><div className="focus-info"><span className="focus-number">{String(focused.index + 1).padStart(3, '0')}</span><div><p className="eyebrow">FORM / TONE / POSSIBILITY</p><h3>{focused.title}</h3></div></div><div className="selection-actions"><button className="primary-button" onClick={viewPane}>View pane <span aria-hidden="true">↗</span></button></div></div>
           <p className="selection-status" role="status">{status}</p>
         </section>
-        <section className="below-gallery" aria-label="Navigation help"><div className="input-help"><span className="keycap">←</span><span className="keycap">→</span><span>Navigate</span><span className="keycap">+ / −</span><span>Density</span><span className="keycap">↵</span><span>Select</span>{cameraControls && <><span className="keycap">View angle</span><span>Rotate · Reset</span></>}</div><p>{Math.min(focus + 1, count).toLocaleString()} / {count.toLocaleString()} · 40 preview panes maximum</p></section>
+        <section className="below-gallery" aria-label="Navigation help"><div className="input-help"><span className="keycap">←</span><span className="keycap">→</span><span>{workspace && resolvedDrag !== 'none' ? 'Move pane' : 'Navigate'}</span>{workspace && resolvedDrag !== 'none' && <><span className="keycap">Home</span><span>Center pane</span></>}<span className="keycap">+ / −</span><span>Density</span><span className="keycap">↵</span><span>Select</span>{cameraControls && <><span className="keycap">View angle</span><span>Rotate · Reset</span></>}</div><p>{Math.min(focus + 1, count).toLocaleString()} / {count.toLocaleString()} · 40 preview panes maximum</p></section>
         <section className="library-note"><div><p className="eyebrow">RENDER ANY REACT CONTENT</p><p>One widget. Three perspectives.<br />Mix the options to make it your own.</p></div><a className="text-button" href="https://github.com/yosun/PrismDeck/tree/main/examples/react">Read the example source ↗</a></section>
       </main>
       <footer><span>PrismDeck <span className="footer-dot">·</span> MIT licensed</span><span>React binding · No Three.js or XR imports</span></footer>

@@ -22,7 +22,7 @@
   <body>
     <div class="page-shell">
       <header class="site-header">
-        <a class="brand" href="./" aria-label="PrismDeck home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>PrismDeck<span class="version">0.4.2</span></a>
+        <a class="brand" href="./" aria-label="PrismDeck home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>PrismDeck<span class="version">0.5.0</span></a>
         <div class="header-actions"><div class="theme-switch" role="group" aria-label="Color theme"><button id="theme-light" type="button" aria-pressed="true">Day</button><button id="theme-dark" type="button" aria-pressed="false">Night</button></div><nav aria-label="Project links"><a href="https://github.com/yosun/PrismDeck#readme">Documentation <span aria-hidden="true">↗</span></a><a href="https://github.com/yosun/PrismDeck">GitHub <span aria-hidden="true">↗</span></a></nav></div>
       </header>
 
@@ -38,24 +38,27 @@
             <div class="variant-switch" role="group" aria-label="Browsing experience">
               <button id="version-a" type="button" aria-pressed="true"><strong>Version A</strong><span>Seamless slide-out</span></button>
               <button id="version-b" type="button" aria-pressed="false"><strong>Version B</strong><span>Modal</span></button>
-              <button id="version-c" type="button" aria-pressed="false"><strong>Version C</strong><span>Wallet wildcard</span></button>
+              <button id="version-c" type="button" aria-pressed="false"><strong>Version C</strong><span>Snap grid</span></button>
             </div>
             <p class="variant-description" id="variant-description">Slide a pane out of the prism. Keep your place in the collection.</p>
             <div class="feature-controls" role="group" aria-label="Independent display options">
-              <label>Layout <select id="layout"><option value="prism">Prism</option><option value="wallet">Wallet</option></select></label>
               <label><input id="prism-lines" type="checkbox" checked /> Prism lines</label>
               <label><input id="timeline-rails" type="checkbox" checked /> Timeline rails</label>
               <label><input id="camera-controls" type="checkbox" title="Show camera controls and enable angle gestures and shortcuts" checked /> Angle controls</label>
+              <label><input id="plane-grid" type="checkbox" /> Plane grid</label>
+              <label>Pane drag <select id="pane-drag" aria-label="Pane drag"><option value="free">Any direction</option><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option><option value="none">Disabled</option></select></label>
+              <label><input id="snap-to-grid" type="checkbox" /> Snap to grid</label>
+              <label>Grid size <select id="grid-size" aria-label="Grid size"><option value="40">Fine · 40</option><option value="80" selected>Regular · 80</option><option value="120">Wide · 120</option><option value="160">Extra wide · 160</option></select></label>
               <label class="selection-mode-label">Selection <select id="selection-mode"><option value="slide-out">Slide-out</option><option value="modal">Modal</option><option value="none">App-defined</option></select></label>
             </div>
           </div>
-          <div class="deck-stage"><div class="stage-label"><span class="live-dot"></span><span id="stage-name">LIVE PRISM</span><span class="stage-hint" id="camera-hint">Shift-drag to orbit · Drag to browse</span></div><p class="wallet-note" id="wallet-note" hidden>A little room for a new perspective.</p><div id="deck" aria-label="Interactive slide collection"></div><span class="stage-axis" aria-hidden="true">SEQUENCE →</span></div>
-          <div class="selection-bar"><div class="focus-info"><span class="focus-number" id="focus-number">001</span><div><p class="eyebrow" id="focus-kicker">FORM &amp; SPACE</p><h3 id="focus-title">Contours of tomorrow</h3></div></div><div class="selection-actions"><button class="secondary-button" id="draw-card" hidden>Draw a card <span aria-hidden="true">⤨</span></button><button class="primary-button" id="open-pane">View pane <span aria-hidden="true">↗</span></button></div></div>
+          <div class="deck-stage"><div class="stage-label"><span class="live-dot"></span><span id="stage-name">LIVE PRISM</span><span class="stage-hint" id="camera-hint">Shift-drag to orbit · Drag to browse</span></div><div id="deck" aria-label="Interactive slide collection"></div><span class="stage-axis" aria-hidden="true">SEQUENCE →</span></div>
+          <div class="selection-bar"><div class="focus-info"><span class="focus-number" id="focus-number">001</span><div><p class="eyebrow" id="focus-kicker">FORM &amp; SPACE</p><h3 id="focus-title">Contours of tomorrow</h3></div></div><div class="selection-actions"><button class="primary-button" id="open-pane">View pane <span aria-hidden="true">↗</span></button></div></div>
           <p class="selection-status" id="selection-status" role="status">Select a pane to bring it into view.</p>
           <div class="sequence-control"><span id="sequence-position">1 / 1,000</span><input id="sequence" type="range" min="0" max="999" value="0" aria-label="Jump to a pane" /><span>ORDERED, NOT OVERWHELMING</span></div>
         </section>
 
-        <section class="below-gallery" aria-label="How it works"><div class="input-help"><span class="keycap">←</span><span class="keycap">→</span><span>Navigate</span><span class="keycap">+ / −</span><span>Density</span><span class="keycap">↵</span><span>Select</span><span class="keycap" id="camera-help-button">View angle</span><span id="camera-help-action">Rotate · Reset</span></div><p id="render-status">40 preview panes maximum · Zero XR loaded</p></section>
+        <section class="below-gallery" aria-label="How it works"><div class="input-help"><span class="keycap">←</span><span class="keycap">→</span><span id="navigation-help-action">Navigate</span><span class="keycap" id="pane-reset-key" hidden>Home</span><span id="pane-reset-action" hidden>Center pane</span><span class="keycap">+ / −</span><span>Density</span><span class="keycap">↵</span><span>Select</span><span class="keycap" id="camera-help-button">View angle</span><span id="camera-help-action">Rotate · Reset</span></div><p id="render-status">40 preview panes maximum · Zero XR loaded</p></section>
         <section class="library-note"><div><p class="eyebrow">YOUR CONTENT. A NEW PERSPECTIVE.</p><p>Slides, photographs, pages, slices, versions.<br />One small widget. Any ordered collection.</p></div><div class="spatial-option"><button class="text-button" id="spatial-button">Try optional spatial / XR view <span aria-hidden="true">↗</span></button><p id="xr-status">Three.js and XR stay unloaded until you opt in.</p></div></section>
       </main>
       <footer><span>PrismDeck <span class="footer-dot">·</span> MIT licensed</span><span>Built to give your content room.</span></footer>

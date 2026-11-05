@@ -79,6 +79,7 @@ export function PrismDeck<T>(props: PrismDeckProps<T>): ReactElement {
       onSelect: (item, index) => latest.current.onSelect?.(item, index),
       onDismiss: () => latest.current.onDismiss?.(),
       onViewChange: view => latest.current.onViewChange?.(view),
+      onPaneMove: (item, index, offset) => latest.current.onPaneMove?.(item, index, offset),
       onActivate: (item, index) => latest.current.onActivate?.(item, index),
     });
     instance.current = deck;
@@ -111,10 +112,14 @@ export function PrismDeck<T>(props: PrismDeckProps<T>): ReactElement {
       selectionMode: props.selectionMode,
       prismLines: props.prismLines,
       timelineRails: props.timelineRails,
+      planeGrid: props.planeGrid,
+      paneDrag: props.paneDrag,
+      snapToGrid: props.snapToGrid,
+      gridSize: props.gridSize,
       transitionDuration: props.transitionDuration,
       renderSelection: props.renderSelection ? selectionRenderer.current : undefined,
     });
-  }, [props.items, props.getKey, props.adapter, props.axis, props.maxVisible, props.label, props.controls, props.cameraControls, props.view, props.theme, props.variant, props.layout, props.selectionMode, props.prismLines, props.timelineRails, props.transitionDuration, !!props.renderSelection]);
+  }, [props.items, props.getKey, props.adapter, props.axis, props.maxVisible, props.label, props.controls, props.cameraControls, props.view, props.theme, props.variant, props.layout, props.selectionMode, props.prismLines, props.timelineRails, props.planeGrid, props.paneDrag, props.snapToGrid, props.gridSize, props.transitionDuration, !!props.renderSelection]);
 
   return createElement(
     Fragment,
@@ -155,6 +160,6 @@ export function usePrismDeck<T>(controller: PrismDeckInstance<T>['controller'] |
 export type { PrismDeckInstance, PrismDeckOptions } from '@prismdeck/dom';
 
 export { PRISMDECK_PRESETS } from '@prismdeck/dom';
-export type { PrismDeckVariant, PrismDeckSelectionMode, PrismDeckPresentationOptions, PrismDeckTheme, PrismDeckLayout } from '@prismdeck/dom';
+export type { PrismDeckVariant, PrismDeckSelectionMode, PrismDeckPresentationOptions, PrismDeckTheme, PrismDeckLayout, PrismDeckPaneDrag, PaneOffset } from '@prismdeck/dom';
 
 export type { ViewAngle } from '@prismdeck/core';
