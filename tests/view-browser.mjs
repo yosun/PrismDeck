@@ -211,7 +211,7 @@ try {
   const touch=await mobile.newPage();observe(touch);
   await touch.addInitScript(()=>{
     window.touchDiagnostics=[];
-    for(const type of ['pointerdown','pointerup','pointercancel','touchstart','touchend','touchcancel','mousedown','mouseup','click','dblclick'])document.addEventListener(type,event=>{
+    for(const type of ['pointerdown','pointerup','pointercancel','touchstart','touchmove','touchend','touchcancel','mousedown','mouseup','click','dblclick'])document.addEventListener(type,event=>{
       const point=event.touches?.[0]??event.changedTouches?.[0]??event;
       window.touchDiagnostics.push({type,time:performance.now(),target:event.target.getAttribute?.('class')??event.target.tagName,pointerId:event.pointerId,detail:event.detail,x:point.clientX,y:point.clientY,aria:document.querySelector('.prismdeck-orbit-toggle')?.getAttribute('aria-pressed')});
     },true);
@@ -246,7 +246,17 @@ try {
     const box=await touch.locator('#one .prismdeck-viewport').boundingBox(),x=box.x+box.width*.5,y=box.y+box.height*.4;
     const before=await touch.evaluate(()=>({state:window.one.controller.getSnapshot(),stats:{...window.stats.one}}));
     await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});
+    // Adjust the angle deliberately and stop before lifting the finger. One
+    // instantaneous jump creates a fling, whose next tap Chromium Aura suppresses:
+    // https://github.com/chromium/chromium/blob/main/components/input/tap_suppression_controller.cc
+    for(let step=1;step<=12;step++) {
+      await touch.evaluate(()=>new Promise(requestAnimationFrame));
+      const amount=1-(1-step/12)**3;
+      await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x+55*amount,y:y+35*amount}]});
+    }
+    await touch.evaluate(()=>new Promise(requestAnimationFrame));
     await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x+55,y:y+35}]});
+    await touch.evaluate(()=>new Promise(requestAnimationFrame));
     await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
     await touch.waitForFunction(()=>window.one.controller.getSnapshot().view.yaw!==0);
     const after=await touch.evaluate(()=>({state:window.one.controller.getSnapshot(),stats:{...window.stats.one}}));
