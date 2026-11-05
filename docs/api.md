@@ -110,6 +110,12 @@ positive gap. Geometry does not allocate browser or renderer resources.
 The optional `view` applies the controller's camera angle to the geometry. Feed
 the same geometry to panes and guide lines so their corners remain aligned.
 
+`getPrismViewAngles(zoom, view?)` returns `{ azimuth, elevation }` in radians for a
+custom renderer that owns its camera placement. It uses exactly the same signed
+view mapping as `getPrismGeometry`, so applications can share PrismDeck's angle
+controls without replacing their own content or selection animations. Normalize
+view state through the controller; use its snapshot's `view` and current zoom.
+
 `visibleIndices(count, focus, maxVisible = 40, zoom = 0)` returns bounded ordered
 indices. Close views use a contiguous focus window; overviews sample the full
 collection while retaining focus and its nearest neighbors.
@@ -119,7 +125,7 @@ collection while retaining focus and its nearest neighbors.
 
 Exported types include `PrismKey`, `PrismVector3`, `PrismAxis`, `PrismAdapter<T>`,
 `PrismSnapshot`, `DeckControllerOptions<T>`, `DeckController<T>`,
-`PrismGeometryOptions`, `PrismCamera`, `PrismGeometry`, and `ViewAngle`. Naming aliases include
+`PrismGeometryOptions`, `PrismCamera`, `PrismGeometry`, `PrismViewAngles`, and `ViewAngle`. Naming aliases include
 `Axis`, `DeckSnapshot`, `DeckOptions<T>`, `PrismDeckSnapshot`, and
 `PrismDeckController<T>`.
 

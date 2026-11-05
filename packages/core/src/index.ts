@@ -11,6 +11,12 @@ export interface ViewAngle {
   readonly pitch: number;
 }
 
+/** Camera angles in radians, resolved from density zoom and the signed view controls. */
+export interface PrismViewAngles {
+  readonly azimuth: number;
+  readonly elevation: number;
+}
+
 export interface PrismAxis {
   label?: string;
   unit?: string;
@@ -296,6 +302,20 @@ const lerp = (from: number, to: number, amount: number) => from + (to - from) * 
 const dot = (a: PrismVector3, b: PrismVector3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const normalizedPositions = new WeakMap<readonly number[], readonly number[]>();
 
+/** Shared oblique-camera orientation for custom renderers and getPrismGeometry. */
+export function getPrismViewAngles(zoom: number, view?: Partial<ViewAngle>): PrismViewAngles {
+  const densityZoom = clamp(Number.isFinite(zoom) ? zoom : 0);
+  const normalized = clampView(view);
+  // Map each half of the angle controls to the available orbit range. Additive
+  // clamps would produce dead slider travel near the overview's wider azimuth.
+  const angle = (base: number, offset: number, limit: number, inputLimit: number) =>
+    base + offset / inputLimit * (offset < 0 ? limit + base : limit - base);
+  return {
+    azimuth: angle(lerp(24, 58, densityZoom), normalized.yaw, 75, 60) * Math.PI / 180,
+    elevation: angle(lerp(6, 18, densityZoom), normalized.pitch, 60, 45) * Math.PI / 180,
+  };
+}
+
 /**
  * Computes a fixed YZ cross-section and an oblique camera. Browsing translates the
  * camera along X; density zoom compresses only the ordered X coordinates.
@@ -348,13 +368,7 @@ export function getPrismGeometry(options: PrismGeometryOptions): PrismGeometry {
     return lerp(normalized[lower], normalized[Math.min(count - 1, lower + 1)], bounded - lower) * spacing;
   };
   const length = coordinateAt(count - 1);
-  const view = clampView(options.view);
-  // Map each half of the angle controls to the available orbit range. Additive
-  // clamps would produce dead slider travel near the overview's wider azimuth.
-  const angle = (base: number, offset: number, limit: number, inputLimit: number) =>
-    base + offset / inputLimit * (offset < 0 ? limit + base : limit - base);
-  const azimuth = angle(lerp(24, 58, zoom), view.yaw, 75, 60) * Math.PI / 180;
-  const elevation = angle(lerp(6, 18, zoom), view.pitch, 60, 45) * Math.PI / 180;
+  const { azimuth, elevation } = getPrismViewAngles(zoom, options.view);
   const direction: PrismVector3 = [Math.cos(azimuth) * Math.cos(elevation), -Math.sin(elevation), -Math.sin(azimuth) * Math.cos(elevation)];
   const right: PrismVector3 = [Math.sin(azimuth), 0, Math.cos(azimuth)];
   const up: PrismVector3 = [Math.cos(azimuth) * Math.sin(elevation), Math.cos(elevation), -Math.sin(azimuth) * Math.sin(elevation)];

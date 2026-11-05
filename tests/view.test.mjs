@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { clampView, createDeckController, getPrismGeometry } from '../packages/core/dist/index.js';
+import { clampView, createDeckController, getPrismGeometry, getPrismViewAngles } from '../packages/core/dist/index.js';
 
 const near = (actual, expected, epsilon = 1e-8) => assert.ok(Math.abs(actual - expected) < epsilon, `${actual} ≈ ${expected}`);
 const dot = (a, b) => a.reduce((sum, value, index) => sum + value * b[index], 0);
@@ -88,6 +88,35 @@ test('zero viewing angles preserve existing camera geometry exactly', () => {
     const elevation = (6 + (18 - 6) * zoom) * Math.PI / 180;
     assert.deepEqual(geometry.camera.direction, [Math.cos(azimuth) * Math.cos(elevation), -Math.sin(elevation), -Math.sin(azimuth) * Math.cos(elevation)]);
     assert.deepEqual(getPrismGeometry({ ...defaults, zoom, view: { yaw: NaN, pitch: Infinity } }).camera, geometry.camera);
+  }
+});
+
+test('shared view angles preserve zoom defaults and normalize partial, invalid, and bounded inputs', () => {
+  for (const zoom of [0, 0.3, 1]) {
+    assert.deepEqual(getPrismViewAngles(zoom), {
+      azimuth: (24 + (58 - 24) * zoom) * Math.PI / 180,
+      elevation: (6 + (18 - 6) * zoom) * Math.PI / 180,
+    });
+    assert.deepEqual(getPrismViewAngles(zoom, { yaw: NaN, pitch: Infinity }), getPrismViewAngles(zoom));
+    near(getPrismViewAngles(zoom, { yaw: -600, pitch: -450 }).azimuth, -75 * Math.PI / 180);
+    near(getPrismViewAngles(zoom, { yaw: -600, pitch: -450 }).elevation, -60 * Math.PI / 180);
+    near(getPrismViewAngles(zoom, { yaw: 600, pitch: 450 }).azimuth, 75 * Math.PI / 180);
+    near(getPrismViewAngles(zoom, { yaw: 600, pitch: 450 }).elevation, 60 * Math.PI / 180);
+    assert.equal(getPrismViewAngles(zoom, { yaw: 20 }).elevation, getPrismViewAngles(zoom).elevation);
+    assert.equal(getPrismViewAngles(zoom, { pitch: 20 }).azimuth, getPrismViewAngles(zoom).azimuth);
+  }
+  for (const zoom of [NaN, Infinity, -Infinity, -5]) assert.deepEqual(getPrismViewAngles(zoom), getPrismViewAngles(0));
+  assert.deepEqual(getPrismViewAngles(5), getPrismViewAngles(1));
+});
+
+test('shared view angles exactly match camera geometry throughout the view controls', () => {
+  for (const zoom of [0, 0.3, 1]) for (const yaw of [-60, -30, 0, 30, 60]) for (const pitch of [-45, -20, 0, 20, 45]) {
+    const view = { yaw, pitch };
+    const { azimuth, elevation } = getPrismViewAngles(zoom, view);
+    const { direction, right, up } = getPrismGeometry({ ...defaults, zoom, view }).camera;
+    assert.deepEqual(direction, [Math.cos(azimuth) * Math.cos(elevation), -Math.sin(elevation), -Math.sin(azimuth) * Math.cos(elevation)]);
+    assert.deepEqual(right, [Math.sin(azimuth), 0, Math.cos(azimuth)]);
+    assert.deepEqual(up, [Math.cos(azimuth) * Math.sin(elevation), Math.cos(elevation), -Math.sin(azimuth) * Math.sin(elevation)]);
   }
 });
 
